@@ -130,11 +130,18 @@ case "$LAB $STEP" in
   echo "caddy: $(docker inspect -f '{{.State.Health.Status}}' mags-mlops-prod-demo-caddy); public /health -> $(code "$PUB/health")"
   ;;
 "lab2 caddy-validate")
-  docker run --rm -i -e GATEWAY_KEY -e SITE_ADDRESS "${CADDY_IMAGE:-caddy:2.11.9@sha256:4851e54a46b206517c574821bb5cc67f170d2156041e9fbc4c9193b45e84a75b}" \
-    caddy validate --adapter caddyfile --config /dev/stdin <Caddyfile 2>&1 | grep -vE '"level":"info"' | tail -n 5
+  # Keep caddy's own exit code; info lines are noise (a filter that empties the output must not fail the step).
+  rc=0
+  out=$(docker run --rm -i -e GATEWAY_KEY -e SITE_ADDRESS "${CADDY_IMAGE:-caddy:2.11.9@sha256:4851e54a46b206517c574821bb5cc67f170d2156041e9fbc4c9193b45e84a75b}" \
+    caddy validate --adapter caddyfile --config /dev/stdin <Caddyfile 2>&1) || rc=$?
+  grep -vE '"level":"info"' <<<"$out" | tail -n 5 || true
+  exit "$rc"
   ;;
 "lab2 caddy-reload")
-  docker compose exec -T caddy caddy reload --adapter caddyfile --config /dev/stdin <Caddyfile 2>&1 | grep -vE '"level":"info"' | tail -n 5
+  rc=0
+  out=$(docker compose exec -T caddy caddy reload --adapter caddyfile --config /dev/stdin <Caddyfile 2>&1) || rc=$?
+  grep -vE '"level":"info"' <<<"$out" | tail -n 5 || true
+  [ "$rc" = 0 ] || die "caddy reload failed (exit $rc) — config unchanged, old config still serving"
   echo "reloaded (zero downtime); public /health -> $(code "$PUB/health")"
   ;;
 "lab2 show-config")
