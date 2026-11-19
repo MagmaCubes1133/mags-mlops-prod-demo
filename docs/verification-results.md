@@ -28,3 +28,26 @@ Image digests: vLLM `vllm/vllm-openai:v0.34.0@sha256:20fdb089454afbb324efa4110a2
 | A6 | PASS (partial) | L4 | — | 2026-11-19 15:13 | `billing_frequency: "hour"` (rate is per hour) but cost accrues pro-rata: ₹0.16 at 14 s runtime, ₹5.27 at 7 m 15 s (≈ ₹43.6/h effective incl. 200 GB disk). Balance is debited in batches. **Start/resume requires balance ≥ 1 h of that instance's cost** (H200 resume refused: "minimum balance of ₹513.19 is required to run it for at least 1 hour"). Paused-disk cost: not yet measured. |
 | A7 | BLOCKED (swap) / PASS (pause→resume) | L4 | 580.196.07 | 2026-11-19 15:18–15:21 | `jl pause` 33 s. `jl resume --gpu H200` refused: **insufficient balance** (needs ₹513.19 for 1 h). `--gpu H100`: "No free H100 GPUs in IN2 right now". `--gpu RTX-PRO6000`: "Paused instances can only resume in their original region" (region lock confirmed). `jl resume` (same L4): 16 s, **new machine id even without a GPU change**; disk intact: marker file, 20 G HF cache, 378 M adapters, both images (vLLM 36.3 GB unpacked), docker-group membership, `.env`. Cross-GPU swap still unverified → re-run after top-up. |
 | B1 | PASS | L4 | 580.196.07 | 2026-11-19 15:15 | `docker pull` vLLM v0.34.0: **136 s** (≈10.0 GB compressed, 36.3 GB unpacked), Caddy 2 s; digests match the pins above. Prefetch (all profiles, unauthenticated HF): BF16 weights 71 s, AWQ 32 s, sql-v1 12 s, stoploss 6 s; whole `prefetch_artifacts.sh all` ≈ 4.5 min. sql-v2: `lora_alpha 32 -> 256 (scale 2 -> 16)`. |
+
+## Phase B (L4, driver 580.196.07, vLLM digest sha256:20fdb089…, 2026-11-19) — partial, interrupted by usage limit
+
+**Correction C-9:** `--quantization fp8` on a BF16 checkpoint does **not** error in v0.34.0. It logs `WARNING [weight_utils.py:383] --quantization fp8 is deprecated for online quantization; use --quantization fp8_per_tensor instead.` and runs as `Fp8PerTensorOnlineLinearMethod` (CutlassFP8ScaledMMLinearKernel, 112 layers quantized).
+
+| ID | Status | Evidence |
+|---|---|---|
+| B2 | PASS | BF16 @0.90 cold: weights 14.29 GiB (39 s), FLASH_ATTN, available KV 4.31 GiB, **70,656 tokens**, max concurrency 8.62× @8k, CUDA graphs 0.47 GiB / 10 s, torch.compile 13 s, init engine 37.7 s. Warm restart: 4.83 GiB → **78,848 tokens**, 9.62×. |
+| B3 | TODO | default util vs 0.90 not yet run |
+| B4 | PASS | cold start to /health 123 s (first compile); warm restarts 42–61 s |
+| B5 | PASS | single stream, 256 tok: ITL p50 56.5 ms / p95 57.4 ms (floor 50.8); TTFT p50 98 ms from laptop (`results/bench-b5-bf16-single.csv`) |
+| C1 | PASS | AWQ: `Using MarlinLinearKernel for AutoAWQMarlinLinearMethod`, no fallback line; weights 5.29 GiB; KV 13.27 GiB, **237,568 tokens**, 29.0×; healthy 81 s; warm prewarm 0.20 s |
+| C2 | PASS | fp8_per_tensor: weights 8.17 GiB (cast 0.14 s, no OOM); KV 10.27 GiB, **182,272 tokens**, 22.25× |
+| C3 | CORRECTED | see C-9 (warning, not error) |
+| C4 | PASS | `--kv-cache-dtype fp8`: **FLASHINFER** backend (candidates FLASHINFER, TRITON_ATTN); **114,688 tokens**, 14.0× |
+| C5 | TODO | benchmark sweep 1/8/20/32 × BF16/AWQ/FP8 |
+| D1–D5 | TODO | LoRA |
+| E1 | PASS | TTFT via Caddy 123.4 ms = direct 123.4 ms; 18 incremental events/stream; ITL 56.5 ms both |
+| E2/E3 | PASS | smoke_test via workflow: 401/401/403×4/413/400, SSE ≥5 events + [DONE] |
+| E4 | PASS | guided_json → 200, prose (ignored); structured_outputs + response_format → valid JSON |
+| E5 | PASS | `lab6 drain` mid-stream: vLLM stopped in 26 s, laptop stream finished all 900 tokens (`finish_reason: length`, `[DONE]`); `common restart` healthy in 42 s |
+| E6 | PASS | 3-turn chat, ~2k-token system prompt: turn-1 TTFT 709 → 127 ms on 2nd pass; prefix-cache hit 81.8% (12,224 / 14,942) |
+| A7/F | TODO | H200 round trip |
