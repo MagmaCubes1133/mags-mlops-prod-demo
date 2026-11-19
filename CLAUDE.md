@@ -20,7 +20,7 @@ Served model name: `qwen2.5-7b`. Adapter aliases: `sql-prod` (points at `/adapte
 - `vllm/vllm-openai:v0.34.0` → pin `@sha256:` digest after first pull; `caddy:2.11.9`; `jarvislabs==0.2.17`
 - `Qwen/Qwen2.5-7B-Instruct@a09a35458c702b33eeacc393d103063234e8bc28`
 - `Qwen/Qwen2.5-7B-Instruct-AWQ@b25037543e9394b818fdfca67ab2a00ecc7dd641`
-- `vindows/qwen2.5-7b-text-to-sql@909715efd1439651aee1f34de37ec3628dbb1945` (sql-v1); sql-v2 = local copy with `lora_alpha` raised (default 256)
+- `vindows/qwen2.5-7b-text-to-sql@909715efd1439651aee1f34de37ec3628dbb1945` (sql-v1); sql-v2 = local copy with `lora_alpha` 32 → 64 (D2: 128+ is gibberish)
 - `TIGER-Lab/StopLoss-Qwen2.5-7B-Instruct@acceabf1d1ab6fc95b4d3058eeb6e9ac8d03b446` (stoploss)
 
 ## Guardrails

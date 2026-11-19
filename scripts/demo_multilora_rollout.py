@@ -16,7 +16,7 @@ compare: load several adapter dirs under temporary names and print answers to 3 
 Usage:
   uv run scripts/demo_multilora_rollout.py rollout --swap-mode none --duration 90      # laptop, BASE_URL=http://<vm-ip>
   uv run scripts/demo_multilora_rollout.py rollout --duration 30                       # on the VM (inline swap)
-  uv run scripts/demo_multilora_rollout.py compare /adapters/sql-v1 /adapters/sql-v2-a128 /adapters/sql-v2-a256
+  uv run scripts/demo_multilora_rollout.py compare /adapters/sql-v1 /adapters/sql-v2-a48 /adapters/sql-v2-a64 /adapters/sql-v2-a96
 """
 
 import argparse
@@ -57,7 +57,8 @@ async def complete(c: httpx.AsyncClient, model: str, prompt: str, max_tokens: in
 async def load_adapter(ops: httpx.AsyncClient, name: str, path: str, inplace: bool) -> float:
     t = time.perf_counter()
     r = await ops.post("/v1/load_lora_adapter", json={"lora_name": name, "lora_path": path, "load_inplace": inplace})
-    r.raise_for_status()
+    if r.status_code != 200:
+        raise SystemExit(f"load_lora_adapter {name} <- {path}: HTTP {r.status_code} {r.text[:300]}")
     return time.perf_counter() - t
 
 

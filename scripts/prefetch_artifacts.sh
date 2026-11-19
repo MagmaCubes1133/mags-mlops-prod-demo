@@ -39,7 +39,7 @@ case $PROFILE in awq|all) dl Qwen/Qwen2.5-7B-Instruct-AWQ "${AWQ_REVISION:-b2503
 case $PROFILE in lora|all)
   dl vindows/qwen2.5-7b-text-to-sql 909715efd1439651aee1f34de37ec3628dbb1945 sql-v1
   dl TIGER-Lab/StopLoss-Qwen2.5-7B-Instruct acceabf1d1ab6fc95b4d3058eeb6e9ac8d03b446 stoploss
-  python3 scripts/make_regressed_adapter.py --alpha "${SQL_V2_ALPHA:-256}"
+  python3 scripts/make_regressed_adapter.py --alpha "${SQL_V2_ALPHA:-64}"
   ;;
 esac
 du -sh "$HF/hub" adapters/* 2>/dev/null || true

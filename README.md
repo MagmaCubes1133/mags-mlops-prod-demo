@@ -62,7 +62,7 @@ Measured latencies per step: `docs/lab-actions.md`.
 | 3 · observability (3.5) | `lab3 metrics` (key `vllm:*` lines; `lab3 metrics kv_cache` filters) · `lab3 prefix-cache` | `uv run scripts/demo_prefix_cache.py` (same 3-turn chat twice: cold vs warm TTFT), then `lab3 prefix-cache` |
 | break | `break awq-warm` (AWQ up, healthy **and** warm — BREAK-01) | — |
 | 4 · quantization + load (4.2) | `lab4 switch baseline\|awq\|fp8\|fp8-kv` (prints boot numbers) · `lab4 vram-math` · `lab4 metrics-watch start` … `stop` (peak `kv_cache_usage_perc`, preemption delta) | `uv run scripts/benchmark_concurrency.py --label awq` between `metrics-watch start` and `stop` |
-| 5 · multi-LoRA (4.3) | `lab5 lora-up` · `lab5 make-v2 256` · `lab5 lora-swap v2` / `lab5 lora-swap v1` (load_inplace; admin is blocked publicly) · `lab5 lora-status` | `uv run scripts/demo_multilora_rollout.py rollout --swap-mode none --duration 120` → must end with `TOTAL non-2xx: 0` |
+| 5 · multi-LoRA (4.3) | `lab5 lora-up` · `lab5 make-v2 64` · `lab5 lora-swap v2` / `lab5 lora-swap v1` (load_inplace; admin is blocked publicly) · `lab5 lora-status` | `uv run scripts/demo_multilora_rollout.py rollout --swap-mode none --duration 120` → must end with `TOTAL non-2xx: 0` |
 | 6 · drain (4.4) | `lab6 drain` (graceful stop: `--shutdown-timeout 30`, `stop_grace_period: 45s`) then `common restart` | start a long `curl -N` stream first; it completes |
 
 Rehearsal-only all-in-one (on the VM): `uv run scripts/demo_multilora_rollout.py rollout` swaps inline.

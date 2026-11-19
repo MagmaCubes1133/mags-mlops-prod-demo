@@ -212,7 +212,7 @@ case "$LAB $STEP" in
   bash scripts/up.sh lora 900; bootlog; bash "$0" lab5 lora-status
   ;;
 "lab5 make-v2")
-  a=${ARG:-256}
+  a=${ARG:-64}
   python3 scripts/make_regressed_adapter.py --alpha "$a" --dst "adapters/sql-v2-a$a"
   python3 scripts/make_regressed_adapter.py --alpha "$a" --dst adapters/sql-v2
   echo "sql-v2 is now alpha=$a (also kept as /adapters/sql-v2-a$a). If sql-prod already points at v2: lab5 lora-swap v2 to reload."

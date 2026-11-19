@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """Make a deliberately 'bad fine-tune' by copying a LoRA adapter and raising lora_alpha.
 
-vLLM scales the LoRA delta by alpha/r, so alpha 32 -> 256 (r=16) multiplies the update 8x:
+vLLM scales the LoRA delta by alpha/r, so alpha 32 -> 64 (r=16) doubles the update:
 deterministic, reproducible degradation with no training.
 
-Usage: python scripts/make_regressed_adapter.py --alpha 256 [--src adapters/sql-v1] [--dst adapters/sql-v2]
+Usage: python scripts/make_regressed_adapter.py --alpha 64 [--src adapters/sql-v1] [--dst adapters/sql-v2]
 """
 
 import argparse
@@ -13,7 +13,7 @@ import shutil
 from pathlib import Path
 
 ap = argparse.ArgumentParser()
-ap.add_argument("--alpha", type=int, default=256)
+ap.add_argument("--alpha", type=int, default=64)
 ap.add_argument("--src", default="adapters/sql-v1")
 ap.add_argument("--dst", default="adapters/sql-v2")
 a = ap.parse_args()
