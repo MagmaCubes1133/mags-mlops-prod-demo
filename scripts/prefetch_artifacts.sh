@@ -42,4 +42,4 @@ case $PROFILE in lora|all)
   python3 scripts/make_regressed_adapter.py --alpha "${SQL_V2_ALPHA:-256}"
   ;;
 esac
-du -sh "$HF/hub"/models--Qwen--* adapters/* 2>/dev/null || true
+du -sh "$HF/hub" adapters/* 2>/dev/null || true

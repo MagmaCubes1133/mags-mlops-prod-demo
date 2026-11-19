@@ -39,8 +39,8 @@ Served model name: `qwen2.5-7b`. Adapter aliases: `sql-prod` (points at `/adapte
 Lint before commit: `docker compose config` (every profile), `caddy validate` via the caddy image, `actionlint`, `shellcheck`, `ruff`. `python scripts/vram_math.py` must reproduce 7,615,616,512 params and 57,344 B/token. Small, descriptive commits.
 
 ## Status
-- [ ] Phase A scaffold
-- [ ] Checkpoint 1 (A1–A7)
+- [x] Phase A scaffold
+- [x] Checkpoint 1 (A1–A6 done; A7 GPU swap blocked on balance — see docs/checkpoint-1.md)
 - [ ] Phase B verification on L4
 - [ ] Fallback dry run (H100)
 - [ ] Checkpoint 2
