@@ -82,3 +82,11 @@ logs/
 .DS_Store
 Thumbs.db
 desktop.ini
+
+# --- Workshop (mags-mlops-prod-demo) ---
+adapters/*
+!adapters/.gitkeep
+.cache/
+id_*
+# non-secret per-GPU profiles (would otherwise match *.env)
+!profiles/*.env
