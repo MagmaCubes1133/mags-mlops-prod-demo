@@ -8,7 +8,8 @@ peak vllm:kv_cache_usage_perc and vllm:num_preemptions_total delta per level.
 Usage (on the VM):
   uv run scripts/benchmark_concurrency.py --label bf16 --concurrency 1 8 20 32
 Writes results/bench-<label>.csv (appends) and prints a markdown table.
-Env: GATEWAY_KEY (or read from .env), BASE_URL (default http://localhost), OPS_URL (default http://127.0.0.1:9090).
+Env: GATEWAY_KEY (or read from .env), BASE_URL (default http://localhost; laptop: http://<vm-ip>),
+METRICS_URL (default http://127.0.0.1:9090 — on a laptop that needs scripts/tunnel.sh; else metrics are skipped).
 """
 
 import argparse
@@ -88,16 +89,26 @@ async def sample_kv(ops: httpx.AsyncClient, peak: list[float], stop: asyncio.Eve
         await asyncio.sleep(0.5)
 
 
+async def scrape(ops: httpx.AsyncClient | None) -> str | None:
+    if ops is None:
+        return None
+    try:
+        return (await ops.get("/metrics")).text
+    except httpx.HTTPError:
+        return None
+
+
 async def run_level(args, conc: int) -> dict:
     headers = {"Authorization": f"Bearer {os.environ['GATEWAY_KEY']}"}
     limits = httpx.Limits(max_connections=conc + 4)
     async with (
         httpx.AsyncClient(base_url=args.base_url, headers=headers, timeout=600, limits=limits) as client,
-        httpx.AsyncClient(base_url=args.ops_url, timeout=10) as ops,
+        httpx.AsyncClient(base_url=args.metrics_url, timeout=5) as ops_client,
     ):
-        before = (await ops.get("/metrics")).text
+        before = await scrape(ops_client if args.metrics_url else None)
+        ops = ops_client if before is not None else None  # no tunnel → skip metrics cleanly
         peak, stop = [0.0], asyncio.Event()
-        sampler = asyncio.create_task(sample_kv(ops, peak, stop))
+        sampler = asyncio.create_task(sample_kv(ops, peak, stop)) if ops else None
         sem = asyncio.Semaphore(conc)
 
         async def bounded():
@@ -108,8 +119,9 @@ async def run_level(args, conc: int) -> dict:
         results = await asyncio.gather(*(bounded() for _ in range(conc * args.rounds)))
         wall = time.perf_counter() - t0
         stop.set()
-        await sampler
-        after = (await ops.get("/metrics")).text
+        if sampler:
+            await sampler
+        after = await scrape(ops)
 
     ok = [r for r in results if r["status"] == 200]
     ttfts = [r["ttft"] * 1000 for r in ok if r["ttft"] is not None]
@@ -125,10 +137,12 @@ async def run_level(args, conc: int) -> dict:
         "itl_p95_ms": round(pct(itls, 95), 2),
         "itl_mean_ms": round(statistics.fmean(itls), 2) if itls else float("nan"),
         "total_tok_s": round(sum(r["tokens"] for r in ok) / wall, 1),
-        "kv_usage_peak": round(peak[0], 3),
+        "kv_usage_peak": round(peak[0], 3) if after is not None else "",
         "preemptions_delta": int(
             metric(after, "vllm:num_preemptions_total") - metric(before, "vllm:num_preemptions_total")
-        ),
+        )
+        if after is not None and before is not None
+        else "",
         "wall_s": round(wall, 1),
     }
 
@@ -142,8 +156,16 @@ def main() -> None:
     ap.add_argument("--max-tokens", type=int, default=256)
     ap.add_argument("--model", default="qwen2.5-7b")
     ap.add_argument("--base-url", default=os.environ.get("BASE_URL", "http://localhost"))
-    ap.add_argument("--ops-url", default=os.environ.get("OPS_URL", "http://127.0.0.1:9090"))
+    ap.add_argument(
+        "--metrics-url",
+        default=os.environ.get("METRICS_URL", "http://127.0.0.1:9090"),
+        help="operator listener; from a laptop open scripts/tunnel.sh first ('' = skip metrics)",
+    )
     args = ap.parse_args()
+    if not asyncio.run(scrape(httpx.AsyncClient(base_url=args.metrics_url, timeout=3) if args.metrics_url else None)):
+        print(
+            f"metrics: {args.metrics_url or '-'} unreachable → skipping kv peak / preemptions (open scripts/tunnel.sh)"
+        )
 
     rows = []
     for conc in args.concurrency:

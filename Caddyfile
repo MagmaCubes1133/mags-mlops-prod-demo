@@ -1,5 +1,6 @@
 {
-	admin off
+	# Admin API only on the container's own loopback (never published): enables `caddy reload` (lab2 caddy-reload).
+	admin localhost:2019
 }
 
 # Public site. Default :80 (plain HTTP on the VM IP). Set SITE_ADDRESS=your.domain for automatic HTTPS.

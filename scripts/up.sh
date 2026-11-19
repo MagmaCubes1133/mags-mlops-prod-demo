@@ -10,6 +10,8 @@ set -a
 # shellcheck source=/dev/null
 . ./.env
 set +a
+# UP_EXTRA_ARGS (e.g. --kv-cache-dtype fp8) is appended for this start only; exported env beats .env in compose.
+export VLLM_EXTRA_ARGS="${VLLM_EXTRA_ARGS:-} ${UP_EXTRA_ARGS:-}"
 c=mags-mlops-prod-demo-vllm
 
 # Compose refuses to enable two profiles that share a container_name, so drop the old one directly.

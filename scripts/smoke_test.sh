@@ -43,10 +43,14 @@ for m in $models; do
 done
 
 # Metric names (v0.34): kv_cache_usage_perc present, legacy gpu_cache_usage_perc absent
-metrics=$(curl -s "$OPS/metrics")
-check "metric vllm:kv_cache_usage_perc" yes "$(grep -q '^vllm:kv_cache_usage_perc' <<<"$metrics" && echo yes || echo no)"
-check "legacy gpu_cache_usage_perc absent" yes "$(grep -q 'gpu_cache_usage_perc' <<<"$metrics" && echo no || echo yes)"
-grep -E '^vllm:(num_requests_running|num_preemptions_total|generation_tokens_total)' <<<"$metrics" | head -5
+metrics=$(curl -s --max-time 5 "$OPS/metrics" || true)
+if [ -z "$metrics" ]; then
+  echo "SKIP  metrics checks ($OPS unreachable — on a laptop, run scripts/tunnel.sh)"
+else
+  check "metric vllm:kv_cache_usage_perc" yes "$(grep -q '^vllm:kv_cache_usage_perc' <<<"$metrics" && echo yes || echo no)"
+  check "legacy gpu_cache_usage_perc absent" yes "$(grep -q 'gpu_cache_usage_perc' <<<"$metrics" && echo no || echo yes)"
+  grep -E '^vllm:(num_requests_running|num_preemptions_total|generation_tokens_total)' <<<"$metrics" | head -5
+fi
 
 [ $fail = 0 ] && echo "SMOKE OK" || echo "SMOKE FAILED"
 exit $fail

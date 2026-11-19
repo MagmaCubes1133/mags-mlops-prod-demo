@@ -4,16 +4,19 @@
 # ///
 """Multi-LoRA zero-downtime rollout demo (needs the `lora` compose profile).
 
-rollout (default): concurrent traffic on base / sql-prod / stoploss while the operator repoints the
-  alias sql-prod: v1 -> v2 (bad fine-tune) -> v1 (rollback) with load_inplace. Counts non-2xx per model,
-  samples vllm:lora_requests_info mid-run, shows the SQL answer from each phase.
+rollout: concurrent traffic on base / sql-prod / stoploss; counts non-2xx per model and prints the
+  sql-prod answer at each phase so the audience sees v1 -> v2 (bad fine-tune) -> v1.
+  --swap-mode inline (rehearsal, all-in-one): this script also repoints sql-prod via load_inplace
+      through the operator listener (on the VM, or from a laptop through scripts/tunnel.sh).
+  --swap-mode none (workshop, laptop side): traffic only; the operator swaps on the VM with
+      `scripts/lab.sh lab5 lora-swap v2` / `... v1` (or scripts/remote.sh lab5 lora-swap v2).
 compare: load several adapter dirs under temporary names and print answers to 3 fixed prompts
-  (used to choose the sql-v2 alpha).
+  (used to choose the sql-v2 alpha). Needs the operator listener.
 
-Usage (on the VM):
-  uv run scripts/demo_multilora_rollout.py rollout --duration 30
-  uv run scripts/demo_multilora_rollout.py compare /adapters/sql-v1 /adapters/sql-v2-a128 /adapters/sql-v2
-Traffic goes through Caddy (BASE_URL); adapter admin + metrics go through the operator listener (OPS_URL).
+Usage:
+  uv run scripts/demo_multilora_rollout.py rollout --swap-mode none --duration 90      # laptop, BASE_URL=http://<vm-ip>
+  uv run scripts/demo_multilora_rollout.py rollout --duration 30                       # on the VM (inline swap)
+  uv run scripts/demo_multilora_rollout.py compare /adapters/sql-v1 /adapters/sql-v2-a128 /adapters/sql-v2-a256
 """
 
 import argparse
@@ -58,7 +61,16 @@ async def load_adapter(ops: httpx.AsyncClient, name: str, path: str, inplace: bo
     return time.perf_counter() - t
 
 
-async def rollout(args, client: httpx.AsyncClient, ops: httpx.AsyncClient) -> int:
+async def lora_info(ops: httpx.AsyncClient | None) -> list[str]:
+    if ops is None:
+        return []
+    try:
+        return re.findall(r"^vllm:lora_requests_info.*$", (await ops.get("/metrics")).text, re.MULTILINE)[:2]
+    except httpx.HTTPError:
+        return []
+
+
+async def rollout(args, client: httpx.AsyncClient, ops: httpx.AsyncClient | None) -> int:
     counts: dict[str, collections.Counter] = collections.defaultdict(collections.Counter)
     stop = asyncio.Event()
     db, q = SQL_CASES[0]
@@ -67,6 +79,7 @@ async def rollout(args, client: httpx.AsyncClient, ops: httpx.AsyncClient) -> in
         "sql-prod": SQL_PROMPT.format(db=db, q=q),
         "stoploss": "Briefly: what is a stop-loss order?",
     }
+    t0 = time.perf_counter()
 
     async def worker(model: str) -> None:
         while not stop.is_set():
@@ -79,20 +92,26 @@ async def rollout(args, client: httpx.AsyncClient, ops: httpx.AsyncClient) -> in
     async def answer(tag: str) -> None:
         r = await complete(client, "sql-prod", prompts["sql-prod"])
         text = r.json()["choices"][0]["text"].strip() if r.status_code == 200 else f"HTTP {r.status_code}"
-        print(f"[{tag}] sql-prod -> {text[:160]!r}")
+        print(f"[{time.perf_counter() - t0:5.1f}s {tag}] sql-prod -> {text[:160]!r}", flush=True)
 
     workers = [asyncio.create_task(worker(m)) for m in prompts for _ in range(args.workers)]
-    phase = args.duration / 3
-    await answer("v1")
-    await asyncio.sleep(phase)
-    m = (await ops.get("/metrics")).text
-    print("metrics:", *re.findall(r"^vllm:lora_requests_info.*$", m, re.MULTILINE)[:2], sep="\n  ")
-    print(f"swap sql-prod -> sql-v2: {await load_adapter(ops, 'sql-prod', args.v2, True):.2f}s")
-    await answer("v2")
-    await asyncio.sleep(phase)
-    print(f"rollback sql-prod -> sql-v1: {await load_adapter(ops, 'sql-prod', args.v1, True):.2f}s")
-    await answer("v1 again")
-    await asyncio.sleep(phase)
+    if args.swap_mode == "inline":
+        phase = args.duration / 3
+        await answer("v1")
+        await asyncio.sleep(phase)
+        print("metrics:", *await lora_info(ops), sep="\n  ")
+        print(f"swap sql-prod -> sql-v2: {await load_adapter(ops, 'sql-prod', args.v2, True):.2f}s")
+        await answer("v2")
+        await asyncio.sleep(phase)
+        print(f"rollback sql-prod -> sql-v1: {await load_adapter(ops, 'sql-prod', args.v1, True):.2f}s")
+        await answer("v1 again")
+        await asyncio.sleep(phase)
+    else:  # traffic only: the swap comes from `lab.sh lab5 lora-swap` on the VM
+        print(f"traffic for {args.duration:.0f}s — swap now with: scripts/remote.sh lab5 lora-swap v2 (then v1)")
+        while time.perf_counter() - t0 < args.duration:
+            await answer("sql-prod")
+            await asyncio.sleep(args.sample_every)
+        print("metrics:", *(await lora_info(ops) or ["(skipped: no tunnel)"]), sep="\n  ")
     stop.set()
     await asyncio.gather(*workers)
 
@@ -121,10 +140,18 @@ async def main() -> int:
     load_env()
     ap = argparse.ArgumentParser()
     ap.add_argument("--base-url", default=os.environ.get("BASE_URL", "http://localhost"))
-    ap.add_argument("--ops-url", default=os.environ.get("OPS_URL", "http://127.0.0.1:9090"))
+    ap.add_argument(
+        "--metrics-url",
+        "--ops-url",
+        dest="ops_url",
+        default=os.environ.get("METRICS_URL", "http://127.0.0.1:9090"),
+        help="operator listener (metrics + LoRA admin); from a laptop: scripts/tunnel.sh",
+    )
     sub = ap.add_subparsers(dest="cmd")
     r = sub.add_parser("rollout")
+    r.add_argument("--swap-mode", choices=["inline", "none"], default="inline")
     r.add_argument("--duration", type=float, default=30)
+    r.add_argument("--sample-every", type=float, default=5, help="swap-mode none: seconds between sql-prod samples")
     r.add_argument("--workers", type=int, default=4, help="concurrent workers per model")
     r.add_argument("--v1", default="/adapters/sql-v1")
     r.add_argument("--v2", default="/adapters/sql-v2")
@@ -139,7 +166,17 @@ async def main() -> int:
         httpx.AsyncClient(base_url=args.base_url, headers=headers, timeout=120) as client,
         httpx.AsyncClient(base_url=args.ops_url, headers=headers, timeout=120) as ops,
     ):
-        return await (compare if args.cmd == "compare" else rollout)(args, client, ops)
+        try:
+            await ops.get("/metrics", timeout=3)
+            reachable = True
+        except httpx.HTTPError:
+            reachable = False
+        if (args.cmd == "compare" or args.swap_mode == "inline") and not reachable:
+            print(f"operator listener {args.ops_url} unreachable: open scripts/tunnel.sh (or use --swap-mode none)")
+            return 2
+        if args.cmd == "compare":
+            return await compare(args, client, ops)
+        return await rollout(args, client, ops if reachable else None)
 
 
 if __name__ == "__main__":

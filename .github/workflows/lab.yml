@@ -1,0 +1,120 @@
+# Run ONE VM-side lab step (scripts/lab.sh) on the Jarvislabs VM over SSH.
+# Laptop: scripts/remote.sh <lab> <step> [arg]. Same commands work directly over SSH as a live fallback.
+# Public repo: ids/IPs masked (.github/jl.sh), output IP-redacted, inputs only via env (never ${{ }} in run:).
+name: lab
+run-name: "lab ${{ inputs.lab }} ${{ inputs.step }} ${{ inputs.arg }}"
+
+on:
+  workflow_dispatch:
+    inputs:
+      lab:
+        type: choice
+        options: [common, lab1, lab2, lab3, break, lab4, lab5, lab6]
+        default: common
+      step:
+        type: choice
+        options:
+          - status
+          - logs
+          - restart
+          - down
+          - capture
+          - up
+          - bootlog
+          - nvidia-smi
+          - edge-up
+          - caddy-validate
+          - caddy-reload
+          - show-config
+          - metrics
+          - prefix-cache
+          - awq-warm
+          - switch
+          - vram-math
+          - metrics-watch
+          - lora-up
+          - make-v2
+          - lora-swap
+          - lora-status
+          - drain
+        default: status
+      arg:
+        description: "Step argument (checked against a per-step allowlist in scripts/lab.sh)"
+        type: string
+        default: ""
+      sync:
+        description: Sync the VM checkout to this commit first
+        type: boolean
+        default: true
+
+concurrency:
+  group: mags-mlops-prod-demo
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  VM_NAME: mags-mlops-prod-demo
+  JL_API_KEY: ${{ secrets.JL_API_KEY }}
+  PYTHONIOENCODING: utf-8
+  COLUMNS: "200"
+  REPO_DIR: /home/ubuntu/mags-mlops-prod-demo
+  LAB: ${{ inputs.lab }}
+  STEP: ${{ inputs.step }}
+  ARG: ${{ inputs.arg }}
+  SYNC: ${{ inputs.sync }}
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: .github
+      - name: Check input charset
+        run: |
+          [[ $ARG =~ ^[A-Za-z0-9._:-]*( [0-9]{1,4})?$ ]] || { echo "::error::arg contains disallowed characters"; exit 1; }
+      - name: Install jl + SSH key
+        env:
+          KEY: ${{ secrets.JL_SSH_PRIVATE_KEY }}
+        run: |
+          pipx install jarvislabs==0.2.17 > /dev/null
+          install -d -m 700 ~/.ssh && printf '%s\n' "$KEY" > ~/.ssh/id_ed25519 && chmod 600 ~/.ssh/id_ed25519
+      - name: Locate VM + balance
+        run: |
+          source .github/jl.sh
+          vm_find
+          [ "$VM_STATUS" = Running ] || { echo "::error::VM not running (${VM_STATUS:-missing}) — demo-gpu.yml action=resume"; exit 1; }
+          echo "Jarvislabs balance: ₹$(jl status --json | jq -r .balance.balance) · GPU ${VM_GPU}" | tee -a "$GITHUB_STEP_SUMMARY"
+      - name: Sync VM checkout to this commit
+        if: env.SYNC == 'true'
+        run: |
+          source .github/jl.sh
+          vm_exec "cd $REPO_DIR && git fetch -q origin $GITHUB_SHA && git checkout -q $GITHUB_SHA && git log --oneline -1"
+      - name: Run step
+        run: |
+          source .github/jl.sh
+          set +e
+          t=$(date +%s)
+          cmd="cd $REPO_DIR && bash scripts/lab.sh $(printf '%q %q %q' "$LAB" "$STEP" "$ARG")"
+          vm_exec "$cmd" 2>&1 | grep -v '^Executing on' | sed -E 's/\b([0-9]{1,3}\.){3}[0-9]{1,3}\b/<ip>/g' | tee out.txt
+          rc=${PIPESTATUS[0]}
+          {
+            echo "### lab $LAB $STEP ${ARG} → exit $rc in $(( $(date +%s) - t ))s"
+            echo '```'; tail -n 60 out.txt; echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          dir=$(sed -n 's/^ARTIFACT_DIR=//p' out.txt | tail -1)
+          [[ $dir =~ ^results/lab/[A-Za-z0-9._-]+$ ]] && echo "ARTIFACT_DIR=$dir" >> "$GITHUB_ENV"
+          exit "$rc"
+      - name: Fetch artifact from VM
+        if: always() && env.ARTIFACT_DIR != ''
+        run: |
+          source .github/jl.sh
+          jl download "$VM_ID" "$REPO_DIR/$ARTIFACT_DIR" lab-artifact -r > /dev/null
+      - uses: actions/upload-artifact@v4
+        if: always() && env.ARTIFACT_DIR != ''
+        with:
+          name: mags-mlops-prod-demo-lab-${{ inputs.lab }}-${{ inputs.step }}-${{ github.run_id }}
+          path: lab-artifact/

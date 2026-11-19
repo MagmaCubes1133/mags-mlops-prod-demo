@@ -46,13 +46,26 @@ For the scripts below: `export GATEWAY_KEY=$(sed -n 's/^GATEWAY_KEY=//p' .env)`.
 
 ## Lab runbook
 
-| Lab | Topic | Commands |
+Every **VM-side** step has one entrypoint, `scripts/lab.sh <lab> <step> [arg]`, reachable two ways:
+
+- **SSH (live, fastest):** `ssh ubuntu@<vm> 'bash mags-mlops-prod-demo/scripts/lab.sh lab1 up'`
+- **GitHub Actions (no SSH on the presenting laptop):** `scripts/remote.sh lab1 up` → dispatches `.github/workflows/lab.yml`, streams the output, prints dispatch→done time. `SYNC=false scripts/remote.sh …` skips the VM git sync.
+
+**Client-side** steps run on the laptop against Caddy: `export BASE_URL=http://$(scripts/tunnel.sh ip)` and `GATEWAY_KEY` from `.env`. For metrics before/after a load test, keep `scripts/tunnel.sh` open in another terminal (forwards `localhost:9090` → the VM's loopback-only operator listener); without it the scripts skip metrics cleanly.
+Measured latencies per step: `docs/lab-actions.md`.
+
+| Lab | VM-side (`lab.sh` / `remote.sh` args) | Laptop-side |
 |---|---|---|
-| 1 | **Memory math → first boot** | `python3 scripts/vram_math.py` (7,615,616,512 params; 57,344 B/token KV) → `scripts/up.sh baseline` → `docker logs mags-mlops-prod-demo-vllm 2>&1 \| grep -Ei 'model loading took\|kv cache\|maximum concurrency'` |
-| 2 | **Quantization + load testing** | `scripts/up.sh awq` / `scripts/up.sh fp8`; FP8 KV: `VLLM_EXTRA_ARGS=--kv-cache-dtype fp8` in `.env`; `uv run scripts/benchmark_concurrency.py --label awq` → `results/bench-awq.csv` |
-| 3 | **The gateway** | `scripts/smoke_test.sh` (401/403/413/400, SSE); `curl -N` a streamed chat through Caddy; `uv run scripts/demo_structured_output.py` (legacy `guided_json` is silently ignored) |
-| 4 | **Multi-LoRA + zero-downtime rollback** | `scripts/up.sh lora`; `uv run scripts/demo_multilora_rollout.py rollout` — clients call alias `sql-prod`, operator repoints v1 → v2 (bad) → v1 with `load_inplace`, non-2xx count must be 0 |
-| 5 | **Operate it** | metrics via `ssh -L 9090:127.0.0.1:9090` → `curl localhost:9090/metrics \| grep -E 'kv_cache_usage_perc\|num_preemptions_total\|lora_requests_info'`; graceful drain: `docker compose stop` mid-stream (`--shutdown-timeout 30`, `stop_grace_period: 45s`); GPU fallback via the GitHub Actions workflow |
+| any | `common status` · `common logs vllm 100` · `common restart` · `common down` · `common capture` (boot log + metrics → artifact) | — |
+| 1 · first boot (3.3) | `lab1 up` (BF16, waits for /health) · `lab1 bootlog` (weights / KV GiB + tokens / max concurrency / CUDA graphs / backend) · `lab1 nvidia-smi` | `python3 scripts/vram_math.py` |
+| 2 · gateway (3.4) | `lab2 edge-up` · `lab2 caddy-validate` · `lab2 caddy-reload` · `lab2 show-config` (secrets redacted) | `BASE_URL=… bash scripts/smoke_test.sh` (401/403/413/400 + SSE); `curl -N` a streamed chat; `uv run scripts/demo_structured_output.py` |
+| 3 · observability (3.5) | `lab3 metrics` (key `vllm:*` lines; `lab3 metrics kv_cache` filters) · `lab3 prefix-cache` | send the same long prompt twice, then `lab3 prefix-cache` |
+| break | `break awq-warm` (AWQ up, healthy **and** warm — BREAK-01) | — |
+| 4 · quantization + load (4.2) | `lab4 switch baseline\|awq\|fp8\|fp8-kv` (prints boot numbers) · `lab4 vram-math` · `lab4 metrics-watch start` … `stop` (peak `kv_cache_usage_perc`, preemption delta) | `uv run scripts/benchmark_concurrency.py --label awq` between `metrics-watch start` and `stop` |
+| 5 · multi-LoRA (4.3) | `lab5 lora-up` · `lab5 make-v2 256` · `lab5 lora-swap v2` / `lab5 lora-swap v1` (load_inplace; admin is blocked publicly) · `lab5 lora-status` | `uv run scripts/demo_multilora_rollout.py rollout --swap-mode none --duration 120` → must end with `TOTAL non-2xx: 0` |
+| 6 · drain (4.4) | `lab6 drain` (graceful stop: `--shutdown-timeout 30`, `stop_grace_period: 45s`) then `common restart` | start a long `curl -N` stream first; it completes |
+
+Rehearsal-only all-in-one (on the VM): `uv run scripts/demo_multilora_rollout.py rollout` swaps inline.
 
 ### Example requests
 
@@ -83,13 +96,16 @@ Verified facts and on-GPU results: `docs/reference/phase1-verified-facts.md`, `d
 | `docker-compose.yml` | `vllm-{baseline,awq,fp8,lora}` (one profile at a time) + `caddy`; internal network; healthchecks; drain |
 | `Caddyfile` | public site (auth, 403 for internal paths, 256 KB body cap, SSE flush) + operator listener `:9090` |
 | `profiles/<GPU>.env` | per-GPU knobs merged into `.env` by the workflow |
-| `scripts/` | setup, prefetch, `up.sh`, smoke test, benchmark, LoRA rollout, structured outputs, VRAM math |
+| `scripts/lab.sh` | **the** on-VM lab entrypoint (every VM-side step) |
+| `scripts/remote.sh`, `scripts/tunnel.sh` | laptop: run a lab step via GitHub Actions; SSH tunnel for metrics |
+| `scripts/` (rest) | setup, prefetch, `up.sh`, smoke test, benchmark, LoRA rollout, structured outputs, VRAM math |
 | `.github/workflows/demo-gpu.yml` | Jarvislabs provision / deploy / verify / swap-gpu / pause / resume / destroy |
+| `.github/workflows/lab.yml` | one `lab.sh` step on the VM over SSH (inputs `lab`, `step`, `arg`, `sync`) |
 
 ## Instructor: GitHub Actions fallback
 
 `Actions → demo-gpu → Run workflow`. Secrets: `JL_API_KEY`, `JL_SSH_PRIVATE_KEY`, `GATEWAY_KEY`, optional `HF_TOKEN`.
-L4 unavailable? Re-run with `gpu=auto` (walks `fallback_chain`) or `action=swap-gpu gpu=H200` (same disk, same region). `emulate_l4=true` pins the KV pool to the L4 size so KV-capacity demos match the slides (latency will still be faster — say so). Logs are public: ids and IPs are masked.
+L4 unavailable? Re-run with `gpu=auto` (walks `fallback_chain` = `L4,H100,H200,RTX-PRO6000`, VM offerings only) or `action=swap-gpu gpu=H200` (same disk, same region). A100/A30 are container-only on Jarvislabs (no Docker) and are not in the chain. **Balance rule:** Jarvislabs only starts an instance if the balance covers 1 h of it incl. GST (H200 ≈ ₹513) — keep ≥ ₹1,000 on demo day. `emulate_l4=true` pins the KV pool to the L4 size so KV-capacity demos match the slides (latency will still be faster — say so). Logs are public: ids and IPs are masked.
 
 ## Troubleshooting
 
