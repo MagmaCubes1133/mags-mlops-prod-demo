@@ -1,0 +1,35 @@
+{
+	admin off
+}
+
+# Public site. Default :80 (plain HTTP on the VM IP). Set SITE_ADDRESS=your.domain for automatic HTTPS.
+{$SITE_ADDRESS::80} {
+	# Oversized bodies → 413 before they reach vLLM.
+	request_body {
+		max_size 256KB
+	}
+
+	# vLLM's --api-key does NOT guard these; never expose them publicly.
+	@internal path /metrics /metrics/* /load /v1/load_lora_adapter /v1/unload_lora_adapter
+	respond @internal "forbidden" 403
+
+	handle /health {
+		reverse_proxy vllm:8000
+	}
+
+	@unauthorized not header Authorization "Bearer {$GATEWAY_KEY}"
+	respond @unauthorized "unauthorized" 401
+
+	# No `encode` here: compression breaks SSE token streaming.
+	reverse_proxy vllm:8000 {
+		flush_interval -1
+	}
+}
+
+# Operator listener: Docker network + VM loopback (127.0.0.1:9090) only.
+:9090 {
+	respond /caddy-health "ok" 200
+	reverse_proxy vllm:8000 {
+		flush_interval -1
+	}
+}

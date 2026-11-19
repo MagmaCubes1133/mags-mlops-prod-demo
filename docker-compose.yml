@@ -1,0 +1,103 @@
+# mags-mlops-prod-demo — vLLM behind Caddy on one GPU.
+# Run exactly ONE vllm profile at a time:  docker compose --profile baseline up -d
+# Profiles: baseline (BF16) | awq (AWQ-Marlin) | fp8 (online FP8 weights) | lora (BF16 + adapters)
+name: mags-mlops-prod-demo
+
+x-vllm: &vllm
+  image: ${VLLM_IMAGE:-vllm/vllm-openai:v0.34.0@sha256:20fdb089454afbb324efa4110a2c025ff7b27cc1a086e07aa580b18df8ad1ce1}
+  container_name: mags-mlops-prod-demo-vllm
+  restart: unless-stopped
+  ipc: host
+  stop_grace_period: 45s          # > --shutdown-timeout 30 → in-flight requests drain
+  deploy:
+    resources:
+      reservations:
+        devices: [{ driver: nvidia, count: all, capabilities: [gpu] }]
+  environment:
+    VLLM_API_KEY: ${GATEWAY_KEY:?set GATEWAY_KEY in .env}   # guards /v1 only; Caddy guards the rest
+    HF_HUB_OFFLINE: "1"           # weights come from prefetch; the network is internal
+    VLLM_ENABLE_CUDA_COMPATIBILITY: ${VLLM_ENABLE_CUDA_COMPATIBILITY:-0}
+  volumes:
+    - ${HF_CACHE_DIR:-${HOME}/.cache/huggingface}:/root/.cache/huggingface
+    - ${VLLM_CACHE_DIR:-${HOME}/.cache/vllm}:/root/.cache/vllm   # compile cache → faster warm start
+    - ./adapters:/adapters:ro
+  networks:
+    internal:
+      aliases: [vllm]
+  healthcheck:
+    test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+    interval: 10s
+    timeout: 5s
+    retries: 3
+    start_period: 600s
+
+services:
+  vllm-baseline:
+    <<: *vllm
+    profiles: [baseline]
+    command: >-
+      Qwen/Qwen2.5-7B-Instruct --revision ${MODEL_REVISION:-a09a35458c702b33eeacc393d103063234e8bc28}
+      --served-model-name qwen2.5-7b --max-model-len ${MAX_MODEL_LEN:-8192}
+      --gpu-memory-utilization ${GPU_MEMORY_UTILIZATION:-0.90} --shutdown-timeout 30 ${VLLM_EXTRA_ARGS:-}
+
+  vllm-awq:
+    <<: *vllm
+    profiles: [awq]
+    command: >-
+      Qwen/Qwen2.5-7B-Instruct-AWQ --revision ${AWQ_REVISION:-b25037543e9394b818fdfca67ab2a00ecc7dd641}
+      --served-model-name qwen2.5-7b --max-model-len ${MAX_MODEL_LEN:-8192}
+      --gpu-memory-utilization ${GPU_MEMORY_UTILIZATION:-0.90} --shutdown-timeout 30 ${VLLM_EXTRA_ARGS:-}
+
+  vllm-fp8:
+    <<: *vllm
+    profiles: [fp8]
+    command: >-
+      Qwen/Qwen2.5-7B-Instruct --revision ${MODEL_REVISION:-a09a35458c702b33eeacc393d103063234e8bc28}
+      --quantization fp8_per_tensor
+      --served-model-name qwen2.5-7b --max-model-len ${MAX_MODEL_LEN:-8192}
+      --gpu-memory-utilization ${GPU_MEMORY_UTILIZATION:-0.90} --shutdown-timeout 30 ${VLLM_EXTRA_ARGS:-}
+
+  vllm-lora:
+    <<: *vllm
+    profiles: [lora]
+    environment:
+      VLLM_API_KEY: ${GATEWAY_KEY:?set GATEWAY_KEY in .env}
+      HF_HUB_OFFLINE: "1"
+      VLLM_ENABLE_CUDA_COMPATIBILITY: ${VLLM_ENABLE_CUDA_COMPATIBILITY:-0}
+      VLLM_ALLOW_RUNTIME_LORA_UPDATING: "1"   # /v1/load_lora_adapter — blocked at the edge by Caddy
+    command: >-
+      Qwen/Qwen2.5-7B-Instruct --revision ${MODEL_REVISION:-a09a35458c702b33eeacc393d103063234e8bc28}
+      --served-model-name qwen2.5-7b --max-model-len ${MAX_MODEL_LEN:-8192}
+      --gpu-memory-utilization ${GPU_MEMORY_UTILIZATION:-0.90} --shutdown-timeout 30
+      --enable-lora --max-loras 4 --max-lora-rank 16 --max-cpu-loras 8
+      --lora-modules '{"name":"sql-prod","path":"/adapters/sql-v1","base_model_name":"qwen2.5-7b"}'
+      '{"name":"stoploss","path":"/adapters/stoploss","base_model_name":"qwen2.5-7b"}'
+      ${VLLM_EXTRA_ARGS:-}
+
+  caddy:
+    image: ${CADDY_IMAGE:-caddy:2.11.9@sha256:4851e54a46b206517c574821bb5cc67f170d2156041e9fbc4c9193b45e84a75b}
+    container_name: mags-mlops-prod-demo-caddy
+    restart: unless-stopped
+    environment:
+      GATEWAY_KEY: ${GATEWAY_KEY:?set GATEWAY_KEY in .env}
+      SITE_ADDRESS: ${SITE_ADDRESS:-:80}
+    ports:
+      - "${PUBLIC_PORT:-80}:80"
+      - "127.0.0.1:9090:9090"     # operator listener (metrics, LoRA admin): VM loopback only, use an SSH tunnel
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+    networks: [internal, edge]
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:9090/caddy-health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+networks:
+  internal:
+    internal: true                # no route out, no published ports: vLLM is only reachable via Caddy
+  edge: {}
+
+volumes:
+  caddy_data: {}
