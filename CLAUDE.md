@@ -41,6 +41,6 @@ Lint before commit: `docker compose config` (every profile), `caddy validate` vi
 ## Status
 - [x] Phase A scaffold
 - [x] Checkpoint 1 (A1–A6 done; A7 GPU swap blocked on balance — see docs/checkpoint-1.md)
-- [ ] Phase B verification on L4
-- [ ] Fallback dry run (H100)
-- [ ] Checkpoint 2
+- [x] Phase B verification on L4
+- [x] Fallback dry run (H200; no H100 VM free)
+- [x] Checkpoint 2 (docs/checkpoint-2.md)

@@ -23,7 +23,7 @@ Goal: if an L4 VM is unavailable on Jarvislabs (JL) on demo day, bring the ident
 **Balance rule:** a start/resume needs a `jl status` balance ≥ 1 h of the target's list price (H200 ₹434.97; the API error quotes it as ₹513 because it shows "available" and "required" ×≈1.17); running instances are not reserved — keep ≥ ₹1,000 on demo day.
 
 ## L4-emulation mode
-`EMULATE_L4=true` adds `--kv-cache-memory-bytes <L4 KV size from check B2>` so KV capacity, preemptions and `kv_cache_usage_perc` match the L4 slides on bigger GPUs (latency still faster — say so). This disables the extensible KV cache — expected.
+`EMULATE_L4=true` adds `--kv-cache-memory-bytes=<L4 KV size from check B2>` (with `=`: a space breaks `source .env`) so KV capacity, preemptions and `kv_cache_usage_perc` match the L4 slides on bigger GPUs (latency still faster — say so). This disables the extensible KV cache — expected.
 
 ## Workflow design (`.github/workflows/demo-gpu.yml`)
 Inputs: `action` (provision|deploy|verify|swap-gpu|pause|resume|destroy), `gpu` (auto|L4|H100|H200|RTX-PRO6000; default L4), `fallback_chain` (default `L4,H100,H200,RTX-PRO6000`, used when gpu=auto), `profile` (baseline|awq|fp8|lora|all), `emulate_l4` (bool; default true when gpu≠L4), `machine_id` (optional; else find by name `mags-mlops-prod-demo` via `jl list --json`).
@@ -38,3 +38,10 @@ Profiles (`profiles/<gpu>.env`): `MAX_MODEL_LEN`, `GPU_MEMORY_UTILIZATION`, `KV_
 
 ## Unverified until a GPU run (handoff A1–A7)
 VM L4 availability, `jl resume --gpu` on VMs, VM driver version, open inbound ports on the VM public IP, `--http-ports` on VMs.
+
+## Measured round trip (2026-11-20, A7/F)
+
+- `swap-gpu` runs provision → deploy → verify in one dispatch. **L4 → H200 with `profile=all emulate_l4=true`: 594 s to four green smoke tests** (provision 115 s, deploy 167 s, verify 280 s). First profile healthy 76 s after deploy starts.
+- **H200 → L4 with `profile=baseline`: 337 s**; `pause` 53 s. The disk (images, HF cache, adapters, `.env`) survives both swaps; every profile boots offline.
+- No H100 VM was free in IN2 on either day; H200 (₹434.97/h, needs ≈ ₹440 `jl status` balance) is the practical fallback.
+- Demo-day: if the L4 fails, dispatch `swap-gpu gpu=auto profile=baseline emulate_l4=true` and keep teaching; it is verified ≈ 10 min later.
