@@ -66,7 +66,9 @@ async def lora_info(ops: httpx.AsyncClient | None) -> list[str]:
     if ops is None:
         return []
     try:
-        return re.findall(r"^vllm:lora_requests_info.*$", (await ops.get("/metrics")).text, re.MULTILINE)[:2]
+        # one series per label set; the value is the last time it was seen -> show the newest
+        lines = re.findall(r"^vllm:lora_requests_info.*$", (await ops.get("/metrics")).text, re.MULTILINE)
+        return sorted(lines, key=lambda line: float(line.rsplit(" ", 1)[1]))[-3:]
     except httpx.HTTPError:
         return []
 
