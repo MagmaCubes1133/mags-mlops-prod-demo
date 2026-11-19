@@ -49,6 +49,7 @@ Pins: see `docs/reference/phase1-verified-facts.md`.
 | E2 | No/invalid bearer → 401; `/metrics`, `/load`, `/v1/load_lora_adapter`, `/v1/unload_lora_adapter` via public site → 403 | as stated |
 | E3 | Oversized body → 413 (Caddy); prompt+max_tokens > max_model_len → 400 (vLLM) | both |
 | E4 | `guided_json` silently ignored (200, schema violated) vs `structured_outputs` / `response_format json_schema` enforced | capture both |
+| E6 | Prefix cache on multi-turn chat: `scripts/demo_prefix_cache.py` sends the same 3-turn chat (≈2k-token system prompt) twice | 2nd pass: TTFT per turn drops; `vllm:prefix_cache_hits_total / vllm:prefix_cache_queries_total` rises; record TTFT cold vs warm and hit ratio |
 | E5 | Graceful drain: `--shutdown-timeout 30`, `stop_grace_period: 45s`; `docker compose stop` mid-stream | in-flight request completes |
 
 ## F. Fallback GPU dry run (once, before demo day)
