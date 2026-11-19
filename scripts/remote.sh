@@ -24,6 +24,7 @@ rc=0
 gh run watch "$id" --repo "$R" --exit-status --interval 3 >/dev/null 2>&1 || rc=$?
 # print the "Run step" output (log lines are: job<TAB>step<TAB>timestamp text)
 gh run view "$id" --repo "$R" --log 2>/dev/null | awk -F'\t' '$2 == "Run step" {sub(/^[^ ]+ /, "", $3); print $3}' \
-  | grep -vE '^(source |set \+e|t=|cmd=|vm_exec|rc=|\{|echo|\}|dir=|\[\[|exit|##\[group\]|##\[endgroup\]|shell: |  [A-Z_]+: )' || true
+  | sed 's/\x1b\[[0-9;]*m//g' \
+  | awk '/^##\[endgroup\]/ {on = 1; next} on && !/^##\[/' || true
 echo "remote $* → $([ $rc = 0 ] && echo OK || echo "FAILED ($rc)") · dispatch→done $(( $(date +%s) - t0 ))s · run $id"
 exit "$rc"
