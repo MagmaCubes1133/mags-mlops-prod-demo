@@ -87,10 +87,10 @@ jobs:
           # Only VM offerings can run Docker (A100/A100-80GB/A30 are container-only on Jarvislabs).
           jq -e --arg g "$GPU" 'any(.[]; .workload_type=="vm" and .gpu_type==$g)' gpus.json > /dev/null \
             || { echo "::error::$GPU is not offered as a VM"; exit 1; }
-          # Jarvislabs refuses a start unless the balance covers 1 h of the instance incl. 18% GST.
+          # Jarvislabs refuses a start unless the balance covers 1 h of the instance (running instances are not reserved).
           price=$(jq -r --arg g "$GPU" '[.[] | select(.workload_type=="vm" and .gpu_type==$g)][0].price_per_hour' gpus.json)
           bal=$(jl status --json | jq -r .balance.balance)
-          echo "balance ₹$bal; 1 h of $GPU incl. GST ≈ ₹$(jq -n "$price*1.18*100|round/100")" >> "$GITHUB_STEP_SUMMARY"
+          echo "balance ₹$bal; 1 h of $GPU = ₹$price (list price)" >> "$GITHUB_STEP_SUMMARY"
           { echo "price=$price"; echo "balance=$bal"; } >> "$GITHUB_OUTPUT"
           echo "gpu=$GPU" >> "$GITHUB_OUTPUT"
           echo "**Selected GPU: $GPU**" >> "$GITHUB_STEP_SUMMARY"
@@ -108,8 +108,8 @@ jobs:
     steps:
       - name: One-hour balance rule
         run: |
-          jq -ne "$BALANCE >= $PRICE*1.18 + 5" > /dev/null \
-            || { echo "::error::balance ₹$BALANCE < 1 h of $GPU (₹$PRICE x 1.18): Jarvislabs would refuse the start"; exit 1; }
+          jq -ne "$BALANCE >= $PRICE + 5" > /dev/null \
+            || { echo "::error::balance ₹$BALANCE < 1 h of $GPU (₹$PRICE): Jarvislabs would refuse the start"; exit 1; }
       - uses: actions/checkout@v4
       - name: Install jl + SSH key
         env:

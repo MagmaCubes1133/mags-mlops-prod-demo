@@ -20,7 +20,7 @@ Goal: if an L4 VM is unavailable on Jarvislabs (JL) on demo day, bring the ident
 | 3 | `RTX-PRO6000` | IN1 | Blackwell, sm_120 | 96 GB | FP8 native; different region → fresh create only; re-prefetch (~5 min measured on IN2). |
 
 **Dropped (2026-11-19, checkpoint 1):** `A100`, `A100-80GB`, `A30` are offered by Jarvislabs only as *container* instances, which cannot run Docker → no VM path. `select-gpu` filters on `workload_type=="vm"`.
-**Balance rule:** a start/resume needs ≥ 1 h of the target's cost incl. 18% GST (H200 ≈ ₹513) — keep ≥ ₹1,000 on demo day.
+**Balance rule:** a start/resume needs a `jl status` balance ≥ 1 h of the target's list price (H200 ₹434.97; the API error quotes it as ₹513 because it shows "available" and "required" ×≈1.17); running instances are not reserved — keep ≥ ₹1,000 on demo day.
 
 ## L4-emulation mode
 `EMULATE_L4=true` adds `--kv-cache-memory-bytes <L4 KV size from check B2>` so KV capacity, preemptions and `kv_cache_usage_perc` match the L4 slides on bigger GPUs (latency still faster — say so). This disables the extensible KV cache — expected.

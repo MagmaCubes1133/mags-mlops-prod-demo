@@ -105,7 +105,7 @@ Verified facts and on-GPU results: `docs/reference/phase1-verified-facts.md`, `d
 ## Instructor: GitHub Actions fallback
 
 `Actions → demo-gpu → Run workflow`. Secrets: `JL_API_KEY`, `JL_SSH_PRIVATE_KEY`, `GATEWAY_KEY`, optional `HF_TOKEN`.
-L4 unavailable? Re-run with `gpu=auto` (walks `fallback_chain` = `L4,H100,H200,RTX-PRO6000`, VM offerings only) or `action=swap-gpu gpu=H200` (same disk, same region). A100/A30 are container-only on Jarvislabs (no Docker) and are not in the chain. **Balance rule:** Jarvislabs only starts an instance if the balance covers 1 h of it incl. GST (H200 ≈ ₹513) — keep ≥ ₹1,000 on demo day. `emulate_l4=true` pins the KV pool to the L4 size so KV-capacity demos match the slides (latency will still be faster — say so). Logs are public: ids and IPs are masked.
+L4 unavailable? Re-run with `gpu=auto` (walks `fallback_chain` = `L4,H100,H200,RTX-PRO6000`, VM offerings only) or `action=swap-gpu gpu=H200` (same disk, same region). A100/A30 are container-only on Jarvislabs (no Docker) and are not in the chain. **Balance rule:** Jarvislabs only starts an instance if the `jl status` balance covers 1 h of its list price (H200 ₹434.97; the error message quotes both sides ×≈1.17); a running VM is not reserved — keep ≥ ₹1,000 on demo day. `emulate_l4=true` pins the KV pool to the L4 size so KV-capacity demos match the slides (latency will still be faster — say so). Logs are public: ids and IPs are masked.
 
 ## Troubleshooting
 

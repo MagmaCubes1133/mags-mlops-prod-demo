@@ -13,6 +13,7 @@ Image digests: vLLM `vllm/vllm-openai:v0.34.0@sha256:20fdb089454afbb324efa4110a2
 | C-4 | Prices | Jarvislabs prices are **INR**, not USD (L4 VM ₹41.31/h ≈ $0.49/h) | budget maths |
 | C-5 | (tooling) `jl exec` output | `jl exec` prints `Executing on <machine_id>: <command>` → the workflow masks the id before any `jl exec` | handled in `.github/jl.sh` |
 | C-6 | (tooling) Compose `.env` | `KEY=   # comment` with an empty value is **not** stripped: the comment becomes the value | `.env.example` keeps comments on their own lines |
+| C-8 | (checkpoint 1) "start needs ≥ 1 h incl. GST" | The API compares "available" vs "required", **both ≈ 1.17× the `jl status` figures** (paused L4: ₹469.56 avail vs ₹399.79 balance; running L4: ₹2,811.56 vs ₹2,397.23; 8×H200 required ₹4,084.24 ≈ 8 × ₹434.97 × 1.17). **A running VM is not reserved** (ratio identical running vs paused). Rule in `jl status` terms: balance ≥ 1 h of list price. | demo-gpu guard = `balance ≥ price + 5`; H200 needs ≈ ₹435 of `jl status` balance |
 | C-7 | (tooling) Compose v5 profiles | enabling two profiles whose services share `container_name` is an error | `scripts/up.sh` removes the old vLLM container by service label |
 
 ## Results

@@ -24,7 +24,7 @@ Served model name: `qwen2.5-7b`. Adapter aliases: `sql-prod` (points at `/adapte
 - `TIGER-Lab/StopLoss-Qwen2.5-7B-Instruct@acceabf1d1ab6fc95b4d3058eeb6e9ac8d03b446` (stoploss)
 
 ## Guardrails
-- Ask before: spending more than ₹450 of Jarvislabs credit in one go (balance must never drop below ₹1,000 — demo-day reserve; check `jl status` before every start: a start needs ≥ 1 h of that instance's cost incl. GST); destroying any Jarvislabs instance not created in this session; setting/changing repo secrets.
+- Ask before: spending more than ₹450 of Jarvislabs credit in one go (balance must never drop below ₹1,000 — demo-day reserve; check `jl status` before every start: a start needs `jl status` balance ≥ 1 h of the instance's list price; running instances are not reserved); destroying any Jarvislabs instance not created in this session; setting/changing repo secrets.
 - Pause the VM whenever idle. Final state: exactly one paused L4 VM named `mags-mlops-prod-demo` with images, weights, adapters on disk.
 - Never print secrets (`JL_API_KEY`, `GATEWAY_KEY`, `HF_TOKEN`, SSH private key). Never publish vLLM's port 8000; only Caddy faces the network.
 - Don't "fix" verified facts back to older vLLM conventions (e.g. `gpu_cache_usage_perc`, `--quantization fp8` on BF16, `guided_json`).
