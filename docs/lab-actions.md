@@ -12,8 +12,8 @@ Latency = dispatch → run done via `scripts/remote.sh` on L4, 2026-11-19 (sync=
 | common logs vllm 40 | tail of a container log (IP-redacted) | 42 s | live |
 | common capture | boot log + metrics + nvidia-smi → artifact | 56 s | live |
 | common restart | restart vLLM, wait /health | 84 s | backstage |
-| common down | — | not yet run | |
-| lab1 up | BF16 up + wait /health | not yet run via gh (demo-gpu deploy: healthy 123 s cold) | backstage |
+| common down | stop + remove the stack | 44 s | backstage |
+| lab1 up | BF16 up + wait /health (51 s warm) | 94 s | backstage |
 | lab1 bootlog | weights / KV / concurrency / graphs / backend | 46 s | live |
 | lab1 nvidia-smi | nvidia-smi + query | 39 s | live |
 | lab2 show-config | Caddyfile + compose config, secrets redacted | 41 s | live |
@@ -25,6 +25,9 @@ Latency = dispatch → run done via `scripts/remote.sh` on L4, 2026-11-19 (sync=
 | break awq-warm | AWQ up + 3 warm requests | 128 s | backstage (start at break) |
 | lab4 switch fp8 / fp8-kv / baseline | switch variant + boot numbers | 121 / 103 / 99 s | backstage |
 | lab4 vram-math | KV/params budget table | 41 s | live |
-| lab4 metrics-watch start/stop | peak kv usage + preemption delta | not yet run | |
-| lab5 lora-up / make-v2 / lora-swap / lora-status | LoRA | not yet run | |
+| lab4 metrics-watch start / stop | background sampler; stop prints peak kv usage + preemption delta | 35 / 47 s (SYNC=false) | live |
+| lab5 lora-up | LoRA profile + adapters listing | 133 s | backstage |
+| lab5 make-v2 [α] | regressed sql-v2 (default α 64) | 31–39 s | live |
+| lab5 lora-swap v1/v2 | in-place repoint of `sql-prod` | 35–36 s (SYNC=false) | live |
+| lab5 lora-status | /v1/models + lora_requests_info | 44 s | live |
 | lab6 drain | graceful stop of vLLM (stopped in 26 s) | 64 s | live |

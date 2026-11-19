@@ -179,7 +179,7 @@ jobs:
           umask 077
           extra=""
           if [ "$EMULATE_L4" = true ] && [ "$VM_GPU" != L4 ]; then
-            extra="--kv-cache-memory-bytes $(sed -n 's/^KV_CACHE_MEMORY_BYTES=//p' profiles/L4.env)"
+            extra="--kv-cache-memory-bytes=$(sed -n 's/^KV_CACHE_MEMORY_BYTES=//p' profiles/L4.env)"
           fi
           { cat "profiles/$VM_GPU.env"
             echo "GATEWAY_KEY=$GATEWAY_KEY"

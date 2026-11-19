@@ -14,6 +14,7 @@ Image digests: vLLM `vllm/vllm-openai:v0.34.0@sha256:20fdb089454afbb324efa4110a2
 | C-5 | (tooling) `jl exec` output | `jl exec` prints `Executing on <machine_id>: <command>` → the workflow masks the id before any `jl exec` | handled in `.github/jl.sh` |
 | C-6 | (tooling) Compose `.env` | `KEY=   # comment` with an empty value is **not** stripped: the comment becomes the value | `.env.example` keeps comments on their own lines |
 | C-8 | (checkpoint 1) "start needs ≥ 1 h incl. GST" | The API compares "available" vs "required", **both ≈ 1.17× the `jl status` figures** (paused L4: ₹469.56 avail vs ₹399.79 balance; running L4: ₹2,811.56 vs ₹2,397.23; 8×H200 required ₹4,084.24 ≈ 8 × ₹434.97 × 1.17). **A running VM is not reserved** (ratio identical running vs paused). Rule in `jl status` terms: balance ≥ 1 h of list price. | demo-gpu guard = `balance ≥ price + 5`; H200 needs ≈ ₹435 of `jl status` balance |
+| C-10 | sql-v2 = `lora_alpha` 32 → **256** | α ≥ 96 gives `nan`/gibberish, not a "visibly worse" model; α 64 gives confident, wrong SQL | default α = 64 in `make_regressed_adapter.py`, `lab.sh make-v2`, `prefetch_artifacts.sh` |
 | C-7 | (tooling) Compose v5 profiles | enabling two profiles whose services share `container_name` is an error | `scripts/up.sh` removes the old vLLM container by service label |
 
 ## Results
@@ -29,22 +30,26 @@ Image digests: vLLM `vllm/vllm-openai:v0.34.0@sha256:20fdb089454afbb324efa4110a2
 | A7 | BLOCKED (swap) / PASS (pause→resume) | L4 | 580.196.07 | 2026-11-19 15:18–15:21 | `jl pause` 33 s. `jl resume --gpu H200` refused: **insufficient balance** (needs ₹513.19 for 1 h). `--gpu H100`: "No free H100 GPUs in IN2 right now". `--gpu RTX-PRO6000`: "Paused instances can only resume in their original region" (region lock confirmed). `jl resume` (same L4): 16 s, **new machine id even without a GPU change**; disk intact: marker file, 20 G HF cache, 378 M adapters, both images (vLLM 36.3 GB unpacked), docker-group membership, `.env`. Cross-GPU swap still unverified → re-run after top-up. |
 | B1 | PASS | L4 | 580.196.07 | 2026-11-19 15:15 | `docker pull` vLLM v0.34.0: **136 s** (≈10.0 GB compressed, 36.3 GB unpacked), Caddy 2 s; digests match the pins above. Prefetch (all profiles, unauthenticated HF): BF16 weights 71 s, AWQ 32 s, sql-v1 12 s, stoploss 6 s; whole `prefetch_artifacts.sh all` ≈ 4.5 min. sql-v2: `lora_alpha 32 -> 256 (scale 2 -> 16)`. |
 
-## Phase B (L4, driver 580.196.07, vLLM digest sha256:20fdb089…, 2026-11-19) — partial, interrupted by usage limit
+## Phase B (L4, driver 580.196.07, vLLM digest sha256:20fdb089…, 2026-11-19) 
 
 **Correction C-9:** `--quantization fp8` on a BF16 checkpoint does **not** error in v0.34.0. It logs `WARNING [weight_utils.py:383] --quantization fp8 is deprecated for online quantization; use --quantization fp8_per_tensor instead.` and runs as `Fp8PerTensorOnlineLinearMethod` (CutlassFP8ScaledMMLinearKernel, 112 layers quantized).
 
 | ID | Status | Evidence |
 |---|---|---|
 | B2 | PASS | BF16 @0.90 cold: weights 14.29 GiB (39 s), FLASH_ATTN, available KV 4.31 GiB, **70,656 tokens**, max concurrency 8.62× @8k, CUDA graphs 0.47 GiB / 10 s, torch.compile 13 s, init engine 37.7 s. Warm restart: 4.83 GiB → **78,848 tokens**, 9.62×. |
-| B3 | TODO | default util vs 0.90 not yet run |
+| B3 | PASS | Flag omitted → non-default args has no `gpu_memory_utilization`; log: `Desired GPU memory utilization is (1.0, 22.03 GiB)` → default **1.0** confirmed. KV 7.03 GiB, **96,256 tokens**, 11.75× (vs 0.90: 4.31–4.83 GiB, 70,656–78,848). Explicit `1.0` gives identical numbers. Profiles keep 0.90 (headroom for LoRA / other processes). |
 | B4 | PASS | cold start to /health 123 s (first compile); warm restarts 42–61 s |
 | B5 | PASS | single stream, 256 tok: ITL p50 56.5 ms / p95 57.4 ms (floor 50.8); TTFT p50 98 ms from laptop (`results/bench-b5-bf16-single.csv`) |
 | C1 | PASS | AWQ: `Using MarlinLinearKernel for AutoAWQMarlinLinearMethod`, no fallback line; weights 5.29 GiB; KV 13.27 GiB, **237,568 tokens**, 29.0×; healthy 81 s; warm prewarm 0.20 s |
 | C2 | PASS | fp8_per_tensor: weights 8.17 GiB (cast 0.14 s, no OOM); KV 10.27 GiB, **182,272 tokens**, 22.25× |
 | C3 | CORRECTED | see C-9 (warning, not error) |
 | C4 | PASS | `--kv-cache-dtype fp8`: **FLASHINFER** backend (candidates FLASHINFER, TRITON_ATTN); **114,688 tokens**, 14.0× |
-| C5 | TODO | benchmark sweep 1/8/20/32 × BF16/AWQ/FP8 |
-| D1–D5 | TODO | LoRA |
+| C5 | PASS | `results/bench-{bf16,awq,fp8}.csv`, 256 tok out, 3 req/worker, laptop → Caddy. ITL p50 @1/32: **BF16 56.5/64.2 ms, FP8 34.0/37.1, AWQ 18.8/22.7**. tok/s @32: BF16 484, FP8 832, AWQ 1,295. TTFT p50 @32: 463 / 256 / 416 ms. 0 non-2xx. `metrics-watch` (BF16 sweep): kv usage peak **0.13**, preemptions **0** — this workload never pressures KV on L4. |
+| D1 | PASS | `lab5 lora-up`: healthy 91 s; weights 14.59 GiB (+0.30 vs BF16 for LoRA buffers); KV 3.98 GiB, **53,248 tokens**, 6.50×; `/v1/models` lists `qwen2.5-7b`, `sql-prod` → /adapters/sql-v1, `stoploss`. |
+| D2 | PASS (α changed) | 3 SQL prompts, temp 0: α32 (v1) correct; **α48** mostly wrong (CTE bloat, ClickHouse dialect); **α64 wrong-but-plausible SQL on invented tables (`uitest.public.gross_sales_updated_copy`)**; α96/128 → `nan`; α256 → token salad (`viaviavia…`); α512 → `zuzuzu…`. **Chosen α = 64** (see C-10). |
+| D3 | PASS | `rollout --swap-mode none --duration 200` from laptop + `remote.sh lab5 lora-swap v2` (36 s) then `v1` (35 s): sql-prod output flipped v1→v2 at ~60 s and back at ~118 s; **1,199 requests, 0 non-2xx** (base 400, sql-prod 400, stoploss 399). |
+| D4 | PASS | `vllm:lora_requests_info{max_lora="4",running_lora_adapters=…,waiting_lora_adapters=…}`: one series **per label set**, value = last-seen Unix time (read the newest, not the first). |
+| D5 | PASS | mixed batch observed: `running_lora_adapters="sql-prod,stoploss"` during D3 traffic (base requests run alongside). |
 | E1 | PASS | TTFT via Caddy 123.4 ms = direct 123.4 ms; 18 incremental events/stream; ITL 56.5 ms both |
 | E2/E3 | PASS | smoke_test via workflow: 401/401/403×4/413/400, SSE ≥5 events + [DONE] |
 | E4 | PASS | guided_json → 200, prose (ignored); structured_outputs + response_format → valid JSON |
