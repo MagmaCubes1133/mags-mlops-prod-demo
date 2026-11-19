@@ -1,0 +1,84 @@
+# --- Environment & secrets ---
+.env
+.env.*
+!.env.example
+*.env
+.envrc
+*.pem
+*.key
+*.crt
+*.p12
+credentials.json
+service-account*.json
+secrets/
+.secrets/
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+*.so
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+env/
+.python-version
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+coverage.xml
+htmlcov/
+.tox/
+.ipynb_checkpoints/
+
+# --- ML artifacts & data (track via registry / DVC, not git) ---
+data/
+datasets/
+models/
+artifacts/
+checkpoints/
+outputs/
+*.pkl
+*.pickle
+*.joblib
+*.pt
+*.pth
+*.ckpt
+*.onnx
+*.h5
+*.keras
+*.safetensors
+*.parquet
+*.feather
+
+# --- Experiment tracking ---
+mlruns/
+mlartifacts/
+wandb/
+lightning_logs/
+.dvc/cache/
+.dvc/tmp/
+
+# --- Infra ---
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+!*.tfvars.example
+.kube/
+kubeconfig*
+
+# --- Logs ---
+logs/
+*.log
+
+# --- Editors & OS ---
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
+desktop.ini
