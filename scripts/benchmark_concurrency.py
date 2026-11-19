@@ -164,7 +164,7 @@ def main() -> None:
     args = ap.parse_args()
     if not asyncio.run(scrape(httpx.AsyncClient(base_url=args.metrics_url, timeout=3) if args.metrics_url else None)):
         print(
-            f"metrics: {args.metrics_url or '-'} unreachable → skipping kv peak / preemptions (open scripts/tunnel.sh)"
+            f"metrics: {args.metrics_url or '-'} unreachable -> skipping kv peak / preemptions (open scripts/tunnel.sh)"
         )
 
     rows = []

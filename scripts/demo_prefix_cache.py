@@ -97,7 +97,7 @@ def main() -> None:
         hits, queries = after[0] - before[0], after[1] - before[1]
         print(f"\nprefix cache during this run: {hits:.0f} / {queries:.0f} tokens hit = {100 * hits / queries:.1f}%")
     else:
-        print("\nprefix-cache counters: metrics unreachable → run `scripts/lab.sh lab3 prefix-cache` on the VM")
+        print("\nprefix-cache counters: metrics unreachable -> run `scripts/lab.sh lab3 prefix-cache` on the VM")
 
 
 if __name__ == "__main__":

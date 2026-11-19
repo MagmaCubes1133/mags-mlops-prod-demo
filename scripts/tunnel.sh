@@ -11,9 +11,8 @@ if [ -z "${JL_API_KEY:-}" ] && [ -f .env ]; then
   export JL_API_KEY
 fi
 PY=$(command -v python3 || command -v python)
-ip=$(PYTHONIOENCODING=utf-8 jl list --json | "$PY" -c 'import sys, json
-vms = [i for i in json.load(sys.stdin) if i["name"] == "mags-mlops-prod-demo" and i["status"] == "Running"]
-print(vms[0]["public_ip"] if vms else "")')
+# one-line -c program: Windows pyenv shims break multi-line -c; UTF-8 mode keeps jl's rich output from crashing on a pipe
+ip=$(PYTHONUTF8=1 PYTHONIOENCODING=utf-8 jl list --json | "$PY" -c "import sys, json; v=[i for i in json.load(sys.stdin) if i['name']=='mags-mlops-prod-demo' and i['status']=='Running']; print(v[0]['public_ip'] if v else '')")
 [ -n "$ip" ] || { echo "no running VM named mags-mlops-prod-demo" >&2; exit 1; }
 if [ "${1:-}" = ip ]; then echo "$ip"; exit 0; fi
 echo "tunnel: localhost:${LOCAL_PORT:-9090} → VM 127.0.0.1:9090 (Ctrl-C to close)"
