@@ -9,13 +9,17 @@ Pass 2 reuses the cached KV blocks of the shared prefix, so its TTFT drops. If t
 is reachable (on the VM, or scripts/tunnel.sh on a laptop) it also prints the prefix-cache hit ratio;
 otherwise run `scripts/lab.sh lab3 prefix-cache` on the VM.
 
-Usage: uv run scripts/demo_prefix_cache.py          (BASE_URL=http://<vm-ip> from a laptop)
+Usage: uv run scripts/demo_prefix_cache.py              (BASE_URL=http://<vm-ip> from a laptop)
+       uv run scripts/demo_prefix_cache.py --repeat 150 (~8k-token history: the "recompute" row)
+A per-run nonce opens the system prompt, so pass 1 is cold even if an earlier run cached the policy text.
 """
 
+import argparse
 import json
 import os
 import re
 import time
+import uuid
 from pathlib import Path
 
 import httpx
@@ -26,7 +30,6 @@ POLICY = (
     "Rules: GPU jobs must request a partition, a wall time, and a memory limit. "
     "Interactive sessions are limited to 4 hours. Storage quotas: home 50 GB, scratch 2 TB purged after 30 days. "
 )
-SYSTEM = POLICY * 40  # ≈ 2k tokens of shared prefix
 TURNS = [
     "How long can an interactive session run?",
     "And what happens to files in scratch after a month?",
@@ -55,21 +58,36 @@ def counters(ops: httpx.Client) -> tuple[float, float] | None:
     return total("vllm:prefix_cache_hits_total"), total("vllm:prefix_cache_queries_total")
 
 
-def ttft(c: httpx.Client, messages: list[dict]) -> tuple[float, str]:
-    body = {"model": "qwen2.5-7b", "messages": messages, "max_tokens": 48, "temperature": 0, "stream": True}
-    t0, first, text = time.perf_counter(), None, []
+def ttft(c: httpx.Client, messages: list[dict]) -> tuple[float, str, int]:
+    body = {
+        "model": "qwen2.5-7b",
+        "messages": messages,
+        "max_tokens": 48,
+        "temperature": 0,
+        "stream": True,
+        "stream_options": {"include_usage": True},
+    }
+    t0, first, text, prompt_tokens = time.perf_counter(), None, [], 0
     with c.stream("POST", "/v1/chat/completions", json=body) as r:
         r.raise_for_status()
         for line in r.iter_lines():
             if line.startswith("data: ") and line != "data: [DONE]":
-                delta = json.loads(line[6:])["choices"][0]["delta"].get("content")
+                chunk = json.loads(line[6:])
+                if chunk.get("usage"):
+                    prompt_tokens = chunk["usage"]["prompt_tokens"]
+                if not chunk.get("choices"):
+                    continue
+                delta = chunk["choices"][0]["delta"].get("content")
                 if delta:
                     first = first or time.perf_counter()
                     text.append(delta)
-    return (first - t0) * 1000, "".join(text)
+    return (first - t0) * 1000, "".join(text), prompt_tokens
 
 
 def main() -> None:
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--repeat", type=int, default=40, help="policy repeats: 40 ~ 2k tokens, 150 ~ 7.5k")
+    system = f"[session {uuid.uuid4().hex}] " + POLICY * ap.parse_args().repeat
     load_env()
     base = os.environ.get("BASE_URL", "http://localhost")
     headers = {"Authorization": f"Bearer {os.environ['GATEWAY_KEY']}"}
@@ -80,13 +98,13 @@ def main() -> None:
         before = counters(ops)
         results = []
         for p in (1, 2):
-            messages = [{"role": "system", "content": SYSTEM}]
+            messages = [{"role": "system", "content": system}]
             for i, q in enumerate(TURNS, 1):
                 messages.append({"role": "user", "content": q})
-                ms, answer = ttft(c, messages)
+                ms, answer, n = ttft(c, messages)
                 messages.append({"role": "assistant", "content": answer})
                 results.append((p, i, ms))
-                print(f"pass {p} turn {i}: TTFT {ms:7.1f} ms  {answer[:60]!r}")
+                print(f"pass {p} turn {i}: {n} prompt tokens, TTFT {ms:7.1f} ms  {answer[:60]!r}")
         after = counters(ops)
 
     print("\n| turn | TTFT pass 1 (cold) ms | TTFT pass 2 (warm) ms |\n|---|---|---|")

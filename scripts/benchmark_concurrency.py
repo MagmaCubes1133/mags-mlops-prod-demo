@@ -7,6 +7,10 @@ peak vllm:kv_cache_usage_perc and vllm:num_preemptions_total delta per level.
 
 Usage (on the VM):
   uv run scripts/benchmark_concurrency.py --label bf16 --concurrency 1 8 20 32
+  uv run scripts/benchmark_concurrency.py --label bf16-pressure --preset pressure
+    pressure = ~3k-token prompts, max_tokens 1024, 32 concurrent, 1 round. Each request starts with its own
+    nonce (system message), so no two requests share the first 64-token KV block and prefix caching cannot
+    hide the pressure. BF16 on L4 (~70k KV tokens) cannot hold 32 x ~4k -> requests wait / get preempted.
 Writes results/bench-<label>.csv (appends) and prints a markdown table.
 Env: GATEWAY_KEY (or read from .env), BASE_URL (default http://localhost; laptop: http://<vm-ip>),
 METRICS_URL (default http://127.0.0.1:9090 — on a laptop that needs scripts/tunnel.sh; else metrics are skipped).
@@ -20,6 +24,7 @@ import os
 import re
 import statistics
 import time
+import uuid
 from pathlib import Path
 
 import httpx
@@ -50,18 +55,28 @@ def metric(text: str, name: str) -> float:
     return sum(float(v) for v in vals)
 
 
-async def one_request(client: httpx.AsyncClient, model: str, max_tokens: int) -> dict:
+def messages_for(args) -> list[dict]:
+    if args.preset != "pressure":
+        return [{"role": "user", "content": PROMPT}]
+    # unique first block per request; ~3k tokens of body (PROMPT is ~18 tokens)
+    return [
+        {"role": "system", "content": f"Request {uuid.uuid4().hex}. You are a helpful assistant."},
+        {"role": "user", "content": (PROMPT + " ") * 165},
+    ]
+
+
+async def one_request(client: httpx.AsyncClient, args) -> dict:
     body = {
-        "model": model,
-        "messages": [{"role": "user", "content": PROMPT}],
-        "max_tokens": max_tokens,
+        "model": args.model,
+        "messages": messages_for(args),
+        "max_tokens": args.max_tokens,
         "temperature": 0,
         "ignore_eos": True,
         "stream": True,
         "stream_options": {"include_usage": True},
     }
     t0 = time.perf_counter()
-    ttft, last, gaps, tokens, status = None, None, [], 0, 0
+    ttft, last, gaps, tokens, prompt_tokens, status = None, None, [], 0, 0, 0
     async with client.stream("POST", "/v1/chat/completions", json=body) as r:
         status = r.status_code
         async for line in r.aiter_lines():
@@ -70,6 +85,7 @@ async def one_request(client: httpx.AsyncClient, model: str, max_tokens: int) ->
             chunk = json.loads(line[6:])
             if chunk.get("usage"):
                 tokens = chunk["usage"]["completion_tokens"]
+                prompt_tokens = chunk["usage"]["prompt_tokens"]
             if chunk.get("choices") and chunk["choices"][0]["delta"].get("content"):
                 now = time.perf_counter()
                 if ttft is None:
@@ -77,13 +93,15 @@ async def one_request(client: httpx.AsyncClient, model: str, max_tokens: int) ->
                 else:
                     gaps.append(now - last)
                 last = now
-    return {"status": status, "ttft": ttft, "gaps": gaps, "tokens": tokens}
+    return {"status": status, "ttft": ttft, "gaps": gaps, "tokens": tokens, "prompt_tokens": prompt_tokens}
 
 
 async def sample_kv(ops: httpx.AsyncClient, peak: list[float], stop: asyncio.Event) -> None:
     while not stop.is_set():
         try:
-            peak[0] = max(peak[0], metric((await ops.get("/metrics")).text, "vllm:kv_cache_usage_perc"))
+            text = (await ops.get("/metrics")).text  # peak[0] kv usage, peak[1] requests waiting
+            peak[0] = max(peak[0], metric(text, "vllm:kv_cache_usage_perc"))
+            peak[1] = max(peak[1], metric(text, "vllm:num_requests_waiting"))
         except httpx.HTTPError:
             pass
         await asyncio.sleep(0.5)
@@ -107,13 +125,13 @@ async def run_level(args, conc: int) -> dict:
     ):
         before = await scrape(ops_client if args.metrics_url else None)
         ops = ops_client if before is not None else None  # no tunnel → skip metrics cleanly
-        peak, stop = [0.0], asyncio.Event()
+        peak, stop = [0.0, 0.0], asyncio.Event()
         sampler = asyncio.create_task(sample_kv(ops, peak, stop)) if ops else None
         sem = asyncio.Semaphore(conc)
 
         async def bounded():
             async with sem:
-                return await one_request(client, args.model, args.max_tokens)
+                return await one_request(client, args)
 
         t0 = time.perf_counter()
         results = await asyncio.gather(*(bounded() for _ in range(conc * args.rounds)))
@@ -137,7 +155,9 @@ async def run_level(args, conc: int) -> dict:
         "itl_p95_ms": round(pct(itls, 95), 2),
         "itl_mean_ms": round(statistics.fmean(itls), 2) if itls else float("nan"),
         "total_tok_s": round(sum(r["tokens"] for r in ok) / wall, 1),
+        "prompt_tok_mean": round(statistics.fmean(r["prompt_tokens"] for r in ok)) if ok else "",
         "kv_usage_peak": round(peak[0], 3) if after is not None else "",
+        "waiting_peak": int(peak[1]) if after is not None else "",
         "preemptions_delta": int(
             metric(after, "vllm:num_preemptions_total") - metric(before, "vllm:num_preemptions_total")
         )
@@ -151,9 +171,10 @@ def main() -> None:
     load_env()
     ap = argparse.ArgumentParser()
     ap.add_argument("--label", required=True, help="e.g. bf16, awq, fp8")
-    ap.add_argument("--concurrency", type=int, nargs="+", default=[1, 8, 20, 32])
-    ap.add_argument("--rounds", type=int, default=3, help="requests per level = concurrency x rounds")
-    ap.add_argument("--max-tokens", type=int, default=256)
+    ap.add_argument("--preset", choices=["sweep", "pressure"], default="sweep")
+    ap.add_argument("--concurrency", type=int, nargs="+")
+    ap.add_argument("--rounds", type=int, help="requests per level = concurrency x rounds")
+    ap.add_argument("--max-tokens", type=int)
     ap.add_argument("--model", default="qwen2.5-7b")
     ap.add_argument("--base-url", default=os.environ.get("BASE_URL", "http://localhost"))
     ap.add_argument(
@@ -162,6 +183,10 @@ def main() -> None:
         help="operator listener; from a laptop open scripts/tunnel.sh first ('' = skip metrics)",
     )
     args = ap.parse_args()
+    pressure = args.preset == "pressure"
+    args.concurrency = args.concurrency or ([32] if pressure else [1, 8, 20, 32])
+    args.rounds = args.rounds or (1 if pressure else 3)
+    args.max_tokens = args.max_tokens or (1024 if pressure else 256)
     if not asyncio.run(scrape(httpx.AsyncClient(base_url=args.metrics_url, timeout=3) if args.metrics_url else None)):
         print(
             f"metrics: {args.metrics_url or '-'} unreachable -> skipping kv peak / preemptions (open scripts/tunnel.sh)"
