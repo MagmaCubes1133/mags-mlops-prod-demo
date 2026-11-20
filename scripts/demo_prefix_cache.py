@@ -10,7 +10,7 @@ is reachable (on the VM, or scripts/tunnel.sh on a laptop) it also prints the pr
 otherwise run `scripts/lab.sh lab3 prefix-cache` on the VM.
 
 Usage: uv run scripts/demo_prefix_cache.py              (BASE_URL=http://<vm-ip> from a laptop)
-       uv run scripts/demo_prefix_cache.py --repeat 150 (~8k-token history: the "recompute" row)
+       uv run scripts/demo_prefix_cache.py --repeat 130 (~8k-token history: the "recompute" row)
 A per-run nonce opens the system prompt, so pass 1 is cold even if an earlier run cached the policy text.
 """
 
@@ -86,7 +86,7 @@ def ttft(c: httpx.Client, messages: list[dict]) -> tuple[float, str, int]:
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--repeat", type=int, default=40, help="policy repeats: 40 ~ 2k tokens, 150 ~ 7.5k")
+    ap.add_argument("--repeat", type=int, default=40, help="policy repeats: 40 ~ 2.4k tokens, 130 ~ 7.9k (largest that fits 3 turns in 8192)")
     system = f"[session {uuid.uuid4().hex}] " + POLICY * ap.parse_args().repeat
     load_env()
     base = os.environ.get("BASE_URL", "http://localhost")

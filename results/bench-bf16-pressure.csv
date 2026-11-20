@@ -1,0 +1,2 @@
+label,concurrency,requests,non_2xx,ttft_p50_ms,ttft_p95_ms,itl_p50_ms,itl_p95_ms,itl_mean_ms,total_tok_s,prompt_tok_mean,kv_usage_peak,waiting_peak,waiting_s,preemptions_delta,wall_s
+bf16-pressure,32,32,0,14222.2,110916.3,79.63,81.21,95.82,182.5,3011,1.0,29,110.6,6,179.5

@@ -47,3 +47,18 @@ Every measured number a slide quotes. Source = check ID in `docs/verification-re
 | LoRA swap under load: requests / non-2xx | 1,199 / 0 | D3 |
 | sql-v2 α | 64 (α ≥ 96 → `nan` / gibberish) | D2 |
 | `--quantization fp8` on BF16 | deprecation warning, runs as fp8_per_tensor | C3 / C-9 |
+
+## Phase B addenda (L4, 2026-11-20)
+
+| Number | Value | Source |
+|---|---|---|
+| KV tokens AWQ + `--kv-cache-dtype=fp8` | **448,512** (13.27 GiB pool), max concurrency **54.75×** at 8k → ~54 full 8k chats, not ~60 (S4-04) | B-add-1, boot log |
+| AWQ + fp8 KV attention backend | FLASHINFER; kernels still `MarlinLinearKernel for AutoAWQMarlinLinearMethod` | B-add-1 |
+| Pressure preset, 32 × (3,011-tok prompt + 1,024 out), unique first block | **BF16:** KV peak 100%, requests waiting peak 29 for **110.6 s**, **6 preemptions**, TTFT p50/p95 14.2 / 110.9 s, ITL p50 79.6 ms, 182 tok/s, wall **179.5 s** | B-add-2, `results/bench-bf16-pressure.csv` |
+| same, AWQ | **AWQ:** KV peak 52.5%, waiting peak 29 for **29.2 s**, **0 preemptions**, TTFT p50/p95 16.7 / 30.2 s, ITL p50 49.2 ms, 400 tok/s, wall **81.8 s** | B-add-2, `results/bench-awq-pressure.csv` |
+| Why AWQ also shows "waiting 29" | prefill queue, not memory: chunked prefill admits ≤ 2,048 tokens/step, so 32 × 3k prompts queue briefly on any variant. Quote **time waiting** (110.6 s vs 29.2 s) and preemptions (6 vs 0), not the peak | B-add-2 |
+| Prefix cache, ~8k history (recompute row) | 7,854-token prompt: turn-1 TTFT **2,247 ms cold → 133 ms warm** (≈17×); hit rate 83.0% (39,424 / 47,474) | B-add-3, `demo_prefix_cache.py --repeat 130` |
+| Plain `--quantization fp8` warning (exact) | `WARNING [weight_utils.py:383] --quantization fp8 is deprecated for online quantization; use --quantization fp8_per_tensor instead.` | B-add-4 |
+| …what it actually runs | `Selected CutlassFP8ScaledMMLinearKernel for Fp8PerTensorOnlineLinearMethod`; `Quantizing 112 layers` (qkv_proj, o_proj, gate_up_proj, down_proj × 28, `fp8_per_tensor_static`); weights 8.17 GiB; 182,272 KV tokens: identical to `fp8_per_tensor` | B-add-4 |
+
+Live timing: pressure BF16 ≈ 3 min + AWQ ≈ 1.5 min (switch BF16→AWQ ≈ 1–2 min, do it backstage or during the BF16 discussion).

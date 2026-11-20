@@ -20,3 +20,6 @@
 
 ## Spend
 Round start ₹2,398.61 → end ₹2,200.19 (`jl status`, paused): **₹198.42** of the ₹1,200 cap.
+
+## Addendum (2026-11-20): four extra measurements
+B-add-1 … B-add-4 in `verification-results.md`, numbers in `slide-numbers.md`. Spend: ₹2,200.19 → ₹2,149.55 = **₹50.64** (≈ 1 h of L4). Running total for Checkpoint 2: **₹249.06**. Committed docs and git history were audited: they contain no machine ids.

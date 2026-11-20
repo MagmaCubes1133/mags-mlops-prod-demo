@@ -61,7 +61,7 @@ def messages_for(args) -> list[dict]:
     # unique first block per request; ~3k tokens of body (PROMPT is ~18 tokens)
     return [
         {"role": "system", "content": f"Request {uuid.uuid4().hex}. You are a helpful assistant."},
-        {"role": "user", "content": (PROMPT + " ") * 165},
+        {"role": "user", "content": (PROMPT + " ") * 185},
     ]
 
 
@@ -97,11 +97,17 @@ async def one_request(client: httpx.AsyncClient, args) -> dict:
 
 
 async def sample_kv(ops: httpx.AsyncClient, peak: list[float], stop: asyncio.Event) -> None:
+    # peak[0] max kv usage, peak[1] max requests waiting, peak[2] seconds with >= 1 request waiting
+    last = time.perf_counter()
     while not stop.is_set():
         try:
-            text = (await ops.get("/metrics")).text  # peak[0] kv usage, peak[1] requests waiting
+            text = (await ops.get("/metrics")).text
+            now = time.perf_counter()
+            waiting = metric(text, "vllm:num_requests_waiting")
             peak[0] = max(peak[0], metric(text, "vllm:kv_cache_usage_perc"))
-            peak[1] = max(peak[1], metric(text, "vllm:num_requests_waiting"))
+            peak[1] = max(peak[1], waiting)
+            peak[2] += (now - last) if waiting > 0 else 0
+            last = now
         except httpx.HTTPError:
             pass
         await asyncio.sleep(0.5)
@@ -125,7 +131,7 @@ async def run_level(args, conc: int) -> dict:
     ):
         before = await scrape(ops_client if args.metrics_url else None)
         ops = ops_client if before is not None else None  # no tunnel → skip metrics cleanly
-        peak, stop = [0.0, 0.0], asyncio.Event()
+        peak, stop = [0.0, 0.0, 0.0], asyncio.Event()
         sampler = asyncio.create_task(sample_kv(ops, peak, stop)) if ops else None
         sem = asyncio.Semaphore(conc)
 
@@ -158,6 +164,7 @@ async def run_level(args, conc: int) -> dict:
         "prompt_tok_mean": round(statistics.fmean(r["prompt_tokens"] for r in ok)) if ok else "",
         "kv_usage_peak": round(peak[0], 3) if after is not None else "",
         "waiting_peak": int(peak[1]) if after is not None else "",
+        "waiting_s": round(peak[2], 1) if after is not None else "",
         "preemptions_delta": int(
             metric(after, "vllm:num_preemptions_total") - metric(before, "vllm:num_preemptions_total")
         )
