@@ -39,6 +39,7 @@ scripts/tunnel.sh                            # 2nd terminal, keep open: localhos
 | T-24 h (2 Dec) | `jl gpus --json` (use `PYTHONIOENCODING=utf-8`): L4 VM free count in IN2; H100/H200 free | L4 ≥ 1 free; note fallback options |
 | T-24 h | `jl status` balance | **≥ ₹1,000** (H200 start needs ≈ ₹440 of it). Paused disk is billed daily; top up if close |
 | T-24 h | `gh workflow run demo-gpu.yml -f action=resume -f gpu=L4 -f profile=baseline` | green: resume + deploy + SMOKE OK (≈ 4 min) |
+| T-24 h | Actions → **Rehearsal · all labs** | every row ✅ in the final table (≈ 36 min) |
 | T-24 h | dashboard: the VM shows the reserved IP; `scripts/tunnel.sh ip` prints the same address as last time | same IP across pause/resume |
 | T-24 h | `gh workflow run demo-gpu.yml -f action=pause -f gpu=L4` | VM `Paused` |
 | T-60 min | same `resume` run | green, SMOKE OK |

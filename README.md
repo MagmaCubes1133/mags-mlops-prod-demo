@@ -12,7 +12,7 @@ Docker + NVIDIA Container Toolkit + vLLM + Caddy, with every command reproducibl
 [![Images](https://img.shields.io/badge/images-pinned%20by%20sha256-2B3137?logo=docker&logoColor=white)](docker-compose.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-yellow)](LICENSE)
 
-[Quickstart](#quickstart) · [Labs](#labs) · [Actions](#run-the-whole-workshop-from-github-actions) · [Benchmarks](docs/benchmarks.md) · [Slides](docs/slides/) · [Run sheet](docs/demo-day.md) · [Troubleshooting](#troubleshooting)
+[Quickstart](#quickstart) · [Labs](#labs) · [Lab guide](docs/labs.md) · [Actions](#run-the-whole-workshop-from-github-actions) · [Benchmarks](docs/benchmarks.md) · [Slides](docs/slides/) · [Run sheet](docs/demo-day.md) · [Troubleshooting](#troubleshooting)
 
 </div>
 
@@ -107,6 +107,8 @@ jl ssh <machine_id>
 
 ## Labs
 
+**Step-by-step guide with the scripts behind every step: [`docs/labs.md`](docs/labs.md).**
+
 Every **VM-side** step has one entrypoint: `bash scripts/lab.sh <lab> <step> [arg]`. **Laptop-side** steps run against Caddy with `BASE_URL=http://<host>` and `GATEWAY_KEY` set. For metrics from a laptop, keep an SSH tunnel to port 9090 open (`scripts/tunnel.sh` for the Jarvislabs VM, otherwise `ssh -N -L 9090:127.0.0.1:9090 <you>@<host>`).
 
 | Lab | On the GPU host (`lab.sh`) | On the laptop | You should see |
@@ -176,8 +178,11 @@ Every step, server side and client side, is a button in the **Actions** tab. Eac
 | **Lab 4 · Quantization under load** | `client-bench-pressure`, `switch baseline\|awq\|fp8\|fp8-kv`, `vram-math`, `metrics-watch start\|stop`, `client-bench-sweep` (+ `label`) |
 | **Lab 5 · Multi-LoRA rollout** | `lora-up`, `lora-status`, `make-v2`, `client-lora-rollout` (+ `duration`), `lora-swap v2`, `lora-swap v1`, `client-lora-compare` |
 | **Lab 6 · Graceful drain** | `client-stream`, `drain`, `restart` |
+| **Rehearsal · all labs** | one click: every step above, in run-sheet order, then a pass/fail table (≈ 36 min) |
 
 Steps without a prefix run `scripts/lab.sh <lab> <step>` on the VM (35–130 s); `client-…` steps run on a fresh GitHub runner (≈ 30 s setup + the script). All of them share one engine, `.github/workflows/lab.yml`. From a terminal, `scripts/remote.sh <lab> <step> [arg]` clicks the same buttons.
+
+**Every run reports itself.** The live log starts with the repo scripts the step calls, where it runs and the exact command; the run page summary shows pass/fail, the linked scripts, highlights, any tables, and the full output in a code block (also attached as a `log-…` artifact). **Rehearsal · all labs** runs all 42 steps in order with the real interplay and ends with a pass/fail table. Per-step details: [`docs/labs.md`](docs/labs.md).
 
 - **Nothing to update after a resume.** No secret stores the endpoint: every run looks the VM up by name through the Jarvislabs API and reads its current IP. The IP and machine id are masked in the public logs.
 - **Live interplay works.** Start **Lab 5** → `client-lora-rollout`, then click `lora-swap v2` and later `lora-swap v1` while traffic flows (verified: 800 requests, 0 non-2xx). Start **Lab 6** → `client-stream`, then click `drain`: the answer still completes.
@@ -206,10 +211,11 @@ Steps without a prefix run `scripts/lab.sh <lab> <step>` on the VM (35–130 s);
 │   ├── benchmark_concurrency.py, demo_prefix_cache.py, demo_multilora_rollout.py, demo_structured_output.py
 │   ├── vram_math.py, make_regressed_adapter.py
 │   └── remote.sh, tunnel.sh  laptop helpers: run a step via GitHub Actions; SSH tunnel for metrics
-├── .github/workflows/        demo-gpu.yml (VM lifecycle) · common.yml, lab1-6.yml, break.yml (one button per lab) · lab.yml (shared engine)
+├── .github/workflows/        demo-gpu.yml (VM lifecycle) · common.yml, lab1-6.yml, break.yml (one button per lab) · rehearsal.yml (all labs) · lab.yml (shared engine)
 ├── results/                  benchmark CSVs measured on the L4
 └── docs/
     ├── benchmarks.md         every measured number, with method
+    ├── labs.md               every lab step: the scripts it runs, the command, what you should see
     ├── demo-day.md           presenter run sheet: timings, expected output, fallbacks, likely questions
     ├── lab-actions.md        every lab step with its measured latency
     └── slides/               the deck (.pptx) and its 15 diagrams
