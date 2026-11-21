@@ -87,6 +87,7 @@ jobs:
           source .github/jl.sh
           vm_find
           [ "$VM_STATUS" = Running ] || { echo "::error::VM not running (${VM_STATUS:-missing}) — demo-gpu.yml action=resume"; exit 1; }
+          vm_wait_ssh   # a just-resumed VM reports Running before sshd is up
           echo "Jarvislabs balance: ₹$(jl status --json | jq -r .balance.balance) · GPU ${VM_GPU}" | tee -a "$GITHUB_STEP_SUMMARY"
       - name: Sync VM checkout to this commit
         if: env.SYNC == 'true'
