@@ -3,6 +3,23 @@
 One page for presenters. Numbers come from [`benchmarks.md`](benchmarks.md) (L4, vLLM v0.34.0); step timings from [`lab-actions.md`](lab-actions.md).
 Every VM step has two forms: **SSH** `L <lab> <step> [arg]` (fastest) or **gh** `scripts/remote.sh <lab> <step> [arg]` (no SSH needed, 35–130 s).
 
+## Button-only mode (recommended)
+
+No terminal on stage. Open the repo's **Actions** tab in the browser and use three workflows: **demo-gpu** (VM lifecycle), **lab** (`lab` + `step` + `arg`: VM side), **client** (`script`: a fresh GitHub runner calling the public endpoint). Nothing needs updating after a resume: each run looks up the VM's current IP itself. Client runs can overlap with lab runs; each click gets its own runner.
+
+| Segment | Click, in order | Expect (client run times measured 21 Nov, L4) |
+|---|---|---|
+| Lab 1 | lab `lab1 up` → `lab1 bootlog` → `lab1 nvidia-smi` · lab `lab4 vram-math` | numbers in the table below |
+| Lab 2 | lab `lab2 edge-up` → `caddy-validate` → `caddy-reload` → `show-config` · client `smoke` · client `stream` · client `structured-output` | smoke all PASS incl. metrics (≈ 30 s); stream ends `[DONE], finish_reason=stop`; structured: `RESULT: as documented` (≈ 40 s) |
+| Lab 3 | client `prefix-cache` → client `prefix-cache-8k` · lab `lab3 prefix-cache` | hit ≈ 83% (≈ 45 s); warm TTFT is lower but includes ≈ 200 ms runner round trip (see note) |
+| BREAK | lab `break awq-warm` | `VERIFIED: profile=awq` |
+| Lab 4 | client `bench-pressure` label `awq` → lab `lab4 switch baseline` → client `bench-pressure` label `bf16` → lab `lab5 lora-up` | as in *Lab 4 order*; CSVs attached to each client run |
+| Lab 5 | client `lora-rollout` (duration 180) → after ≈ 40 s lab `lab5 lora-swap v2` (`sync` off) → lab `lab5 lora-swap v1` · client `lora-compare` | answers flip to wrong SQL and back; `TOTAL non-2xx during rollout: 0` (21 Nov: 800 requests, 0) |
+| Lab 6 | client `stream` → after ≈ 30 s lab `lab6 drain` → lab `common restart` | drain log `draining in-flight requests count=1`; the stream still ends `[DONE]` |
+| End | demo-gpu `action=pause` | `Paused` |
+
+**TTFT from a runner** includes the round trip from GitHub's datacentre to the VM (≈ 200 ms to an India VM; 21 Nov: single-stream TTFT p50 329 ms vs 98 ms from a laptop in India). Inter-token latency (56.6 ms), throughput (482 tok/s at 32) and KV/preemption numbers match the slides. Quote the slide numbers for TTFT, or say "plus one trip across the world".
+
 ## Laptop prerequisites (Windows Git Bash shown; macOS/Linux skip the first line)
 
 ```bash
@@ -24,8 +41,8 @@ scripts/tunnel.sh                            # 2nd terminal, keep open: localhos
 | T-24 h | `gh workflow run demo-gpu.yml -f action=pause -f gpu=L4` | VM `Paused` |
 | T-60 min | same `resume` run | green, SMOKE OK |
 | T-60 min | `scripts/remote.sh common status` | `active profile: baseline`, `/health 200` |
-| T-60 min | `bash scripts/smoke_test.sh` (laptop, tunnel open) | all PASS, metrics checks PASS (not SKIP) |
-| T-60 min | `uv run scripts/demo_prefix_cache.py` once | warms the cache path; ignore the numbers |
+| T-60 min | client `smoke` (or laptop `bash scripts/smoke_test.sh`, tunnel open) | all PASS, metrics checks PASS (not SKIP) |
+| T-60 min | client `prefix-cache` once | warms the cache path; ignore the numbers |
 
 ## Per segment
 

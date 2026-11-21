@@ -12,7 +12,7 @@ Docker + NVIDIA Container Toolkit + vLLM + Caddy, with every command reproducibl
 [![Images](https://img.shields.io/badge/images-pinned%20by%20sha256-2B3137?logo=docker&logoColor=white)](docker-compose.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-yellow)](LICENSE)
 
-[Quickstart](#quickstart) · [Labs](#labs) · [Benchmarks](docs/benchmarks.md) · [Slides](docs/slides/) · [Run sheet](docs/demo-day.md) · [Troubleshooting](#troubleshooting)
+[Quickstart](#quickstart) · [Labs](#labs) · [Actions](#run-the-whole-workshop-from-github-actions) · [Benchmarks](docs/benchmarks.md) · [Slides](docs/slides/) · [Run sheet](docs/demo-day.md) · [Troubleshooting](#troubleshooting)
 
 </div>
 
@@ -160,6 +160,21 @@ Compare adapters side by side (needs the tunnel): `uv run scripts/demo_multilora
 Run `export MSYS_NO_PATHCONV=1 PYTHONUTF8=1` first. Without it, Git Bash rewrites `/adapters/...` arguments into Windows paths and LoRA loads return 404.
 </details>
 
+## Run the whole workshop from GitHub Actions
+
+Every step, server side and client side, is a button in the **Actions** tab. Each client run starts on a fresh GitHub-hosted runner and calls the public endpoint from outside, so results never depend on a presenter's laptop.
+
+| Workflow | What it runs | Typical time |
+|---|---|---|
+| `demo-gpu` | provision / resume / deploy / verify / swap GPU / pause / destroy | resume → verified ≈ 6 min |
+| `lab` | one VM-side step: `scripts/lab.sh <lab> <step> [arg]` | 35–130 s |
+| `client` | one client script on the runner: `smoke`, `stream`, `structured-output`, `prefix-cache`, `prefix-cache-8k`, `bench-sweep`, `bench-pressure`, `lora-rollout`, `lora-compare` | ≈ 30 s setup + the script |
+
+- **Nothing to update after a resume.** No secret stores the endpoint: every run looks the VM up by name through the Jarvislabs API and reads its current IP. The IP and machine id are masked in the public logs.
+- **Live interplay works.** Start `client lora-rollout`, then click `lab lab5 lora-swap v2` and later `v1` while traffic flows (verified: 800 requests, 0 non-2xx). Start `client stream`, then click `lab lab6 drain`: the answer still completes.
+- **Metrics** reach the runner through an SSH tunnel to the VM's loopback-only port 9090; they are never public.
+- **TTFT from a runner includes the round trip** from GitHub's datacentre to the VM (≈ 200 ms to an India VM). Inter-token latency, throughput, KV usage and preemptions match a local run.
+
 ## vLLM v0.34.0: what differs from most blog posts
 
 - The KV metric is `vllm:kv_cache_usage_perc`, not `gpu_cache_usage_perc`.
@@ -209,7 +224,6 @@ Run `export MSYS_NO_PATHCONV=1 PYTHONUTF8=1` first. Without it, Git Bash rewrite
 - **The API key comes from the `GATEWAY_KEY` repo secret.** Every `provision`, `deploy`, `resume` and `swap-gpu` run writes it into the VM's `.env`. To change it, update the secret *and* your local `.env` to the same value, then run `action=deploy` (or the next `resume`).
 - **The endpoint is never in the logs.** Get it on your laptop with `scripts/tunnel.sh ip` (uses your Jarvislabs key). It changes on every resume.
 
-**What runs entirely on Actions:** provisioning, resume, pause, GPU swap, deploy, the smoke test (on the VM, in `verify`), and every VM-side lab step. **What needs a laptop:** the client-side scripts (load tests, prefix cache, LoRA rollout traffic, structured output, `curl` streams), since they are the demo of a client calling the endpoint.
 </details>
 
 ## Troubleshooting
