@@ -22,6 +22,18 @@ vm_find() {
 # vm_exec '<shell>': run on the VM (exit code propagates). Never pass secrets on the command line.
 vm_exec() { jl exec "$VM_ID" -- bash -lc "$1"; }
 
+# vm_sync: VM checkout := exactly $GITHUB_SHA (detached; works from any branch or detached HEAD).
+# Any failure (fetch, checkout over local edits, HEAD mismatch) exits non-zero -> the step goes red.
+vm_sync() {
+  vm_exec "set -euo pipefail
+    [ -d $REPO_DIR/.git ] || git clone -q https://github.com/$GITHUB_REPOSITORY $REPO_DIR
+    cd $REPO_DIR
+    git fetch -q origin $GITHUB_SHA
+    git checkout -q --detach $GITHUB_SHA
+    [ \"\$(git rev-parse HEAD)\" = $GITHUB_SHA ] || { echo 'sync: HEAD is not $GITHUB_SHA'; exit 1; }
+    echo \"synced: \$(git log --oneline -1)\""
+}
+
 # vm_wait_ssh: up to 5 min for sshd after create/resume
 vm_wait_ssh() {
   for _ in $(seq 1 30); do vm_exec true >/dev/null 2>&1 && return 0; sleep 10; done

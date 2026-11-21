@@ -92,7 +92,7 @@ jobs:
         if: env.SYNC == 'true'
         run: |
           source .github/jl.sh
-          vm_exec "cd $REPO_DIR && git fetch -q origin $GITHUB_SHA && git checkout -q $GITHUB_SHA && git log --oneline -1"
+          vm_sync
       - name: Run step
         run: |
           source .github/jl.sh

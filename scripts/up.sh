@@ -33,3 +33,18 @@ until curl -sf -o /dev/null "http://localhost:${PUBLIC_PORT:-80}/health"; do
   sleep 5
 done
 echo "HEALTHY: profile=$P in $(( $(date +%s) - t ))s"
+
+# Healthy is not enough: prove the running container IS the requested profile (+ UP_EXTRA_ARGS).
+svc=$(docker inspect -f '{{index .Config.Labels "com.docker.compose.service"}}' "$c")
+args=" $(docker inspect -f '{{join .Args " "}}' "$c") "
+wrong() { echo "WRONG PROFILE: wanted $P${UP_EXTRA_ARGS:+ + $UP_EXTRA_ARGS}, running $svc: $*"; exit 1; }
+[ "$svc" = "vllm-$P" ] || wrong "compose service label"
+case $P in
+  awq) [[ $args == *Instruct-AWQ* ]] || wrong "model is not the AWQ checkpoint" ;;
+  fp8) [[ $args == *" --quantization fp8_per_tensor "* ]] || wrong "no --quantization fp8_per_tensor" ;;
+  lora) [[ $args == *" --enable-lora "* ]] || wrong "no --enable-lora" ;;
+  baseline) [[ $args != *Instruct-AWQ* && $args != *" --enable-lora "* && $args != *" --quantization fp8_per_tensor "* ]] \
+    || wrong "baseline container carries another profile's flags" ;;
+esac
+for a in ${UP_EXTRA_ARGS:-}; do [[ $args == *" $a "* ]] || wrong "missing extra arg $a"; done
+echo "VERIFIED: profile=$P$(grep -oE -- ' --(quantization|kv-cache-dtype|kv-cache-memory-bytes|enable-lora)([ =][^- ][^ ]*)?' <<<"$args" | tr -d '\n')"

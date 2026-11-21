@@ -65,7 +65,7 @@ service() { docker inspect -f '{{index .Config.Labels "com.docker.compose.servic
 profile() { local s; s=$(service); echo "${s#vllm-}"; }
 variant() { # profile + the flags that distinguish fp8-kv / L4 emulation
   local p; p=$(profile); [ -n "$p" ] || { echo none; return; }
-  echo "$p $(docker inspect -f '{{join .Args " "}}' "$C" | grep -oE -- '--(quantization|kv-cache-dtype|kv-cache-memory-bytes) [^ ]+' | tr '\n' ' ')"
+  echo "$p $(docker inspect -f '{{join .Args " "}}' "$C" | grep -oE -- '--(quantization|kv-cache-dtype|kv-cache-memory-bytes)[ =][^ ]+' | tr '\n' ' ')"
 }
 wait_health() { # [timeout_s]
   local t; t=$(date +%s)
@@ -88,7 +88,7 @@ case "$LAB $STEP" in
 "common status")
   echo "== GPU"; nvidia-smi --query-gpu=name,driver_version,memory.used,memory.total,utilization.gpu --format=csv,noheader
   echo "== containers"; docker ps -a --filter name=mags-mlops-prod-demo --format '{{.Names}}  {{.Status}}'
-  echo "== active vLLM: $(variant)"
+  echo "== active profile: $(variant)"
   echo "== /health via Caddy: $(code "$PUB/health")"
   echo "== disk"; df -h / | tail -1; du -sh ~/.cache/huggingface/hub adapters 2>/dev/null || true
   echo "== commit: $(git log --oneline -1)"

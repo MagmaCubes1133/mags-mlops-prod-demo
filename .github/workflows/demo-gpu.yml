@@ -167,8 +167,7 @@ jobs:
         run: |
           source .github/jl.sh
           vm_exec "$(cat scripts/setup_host.sh)"
-          vm_exec "set -e; [ -d $REPO_DIR/.git ] || git clone -q https://github.com/$GITHUB_REPOSITORY $REPO_DIR
-                   cd $REPO_DIR && git fetch -q origin $GITHUB_SHA && git checkout -q $GITHUB_SHA && git log --oneline -1"
+          vm_sync
       - name: Write .env from profiles/${{ env.VM_GPU }}.env + secrets
         env:
           GATEWAY_KEY: ${{ secrets.GATEWAY_KEY }}
