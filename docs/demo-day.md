@@ -5,6 +5,8 @@ Every VM step has two forms: **SSH** `L <lab> <step> [arg]` (fastest) or **gh** 
 
 ## Button-only mode (recommended)
 
+**Click one slide early:** a `client-…` step needs ≈ 30 s for its runner, VM steps 35–130 s; start the step on the slide before so it finishes while you explain.
+
 No terminal on stage. In the repo's **Actions** tab each lab is one workflow; pick a step in its dropdown and click **Run workflow**. Steps named `client-…` run on a fresh GitHub runner that calls the public endpoint; the rest run `scripts/lab.sh` on the VM. Nothing needs updating after a resume: each run looks up the VM itself. Wait for a VM step to go green before the next VM click; `client-…` steps can overlap with anything.
 
 | Segment | Workflow → step, in order | Expect (client run times measured 21 Nov, L4) |
@@ -43,6 +45,7 @@ scripts/tunnel.sh                            # 2nd terminal, keep open: localhos
 | T-24 h | dashboard: the VM shows the reserved IP; `scripts/tunnel.sh ip` prints the same address as last time | same IP across pause/resume |
 | T-24 h | `gh workflow run demo-gpu.yml -f action=pause -f gpu=L4` | VM `Paused` |
 | T-60 min | same `resume` run | green, SMOKE OK |
+| T-60 min | [githubstatus.com](https://www.githubstatus.com): Actions operational | if not: run the same steps over SSH (`L <lab> <step>`), and use the BK-02 recordings |
 | T-60 min | **Lab 0** → `status` | `active profile: baseline`, `/health 200` |
 | T-60 min | **Lab 0** → `client-smoke` (or laptop `bash scripts/smoke_test.sh`, tunnel open) | all PASS, metrics checks PASS (not SKIP) |
 | T-60 min | **Lab 3** → `client-prefix-cache` once | warms the cache path; ignore the numbers |

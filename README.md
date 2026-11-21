@@ -12,7 +12,7 @@ Docker + NVIDIA Container Toolkit + vLLM + Caddy, with every command reproducibl
 [![Images](https://img.shields.io/badge/images-pinned%20by%20sha256-2B3137?logo=docker&logoColor=white)](docker-compose.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-yellow)](LICENSE)
 
-[Quickstart](#quickstart) · [Labs](#labs) · [Lab guide](docs/labs.md) · [Actions](#run-the-whole-workshop-from-github-actions) · [Benchmarks](docs/benchmarks.md) · [Slides](docs/slides/) · [Run sheet](docs/demo-day.md) · [Troubleshooting](#troubleshooting)
+[Quickstart](#quickstart) · [Labs](#labs) · [Lab guide](docs/labs.md) · [Configuration](#configuration) · [Actions](#run-the-whole-workshop-from-github-actions) · [Benchmarks](docs/benchmarks.md) · [Slides](docs/slides/) · [Run sheet](docs/demo-day.md) · [Troubleshooting](#troubleshooting)
 
 </div>
 
@@ -126,6 +126,7 @@ Always available: `common status` (prints the active profile) · `common logs vl
 
 - **API key.** Caddy accepts exactly one bearer token: `GATEWAY_KEY` from the host's `.env`. You choose it. The Quickstart generates a random one; any value made of `A–Z a–z 0–9 _ -` works (use ≥ 32 characters). Change it in `.env`, then `bash scripts/up.sh <profile>` to restart Caddy with it.
 - **Endpoint.** `http://<host-ip>` on port 80; the API lives under `/v1`. On the GPU host itself, use `http://localhost`.
+- **Metrics and LoRA admin.** vLLM's port 8000 is never published, not even on the host. Use Caddy's operator listener: `curl 127.0.0.1:9090/metrics` on the host (or through the SSH tunnel), and `POST 127.0.0.1:9090/v1/load_lora_adapter` with the bearer header. The public site answers 403 on both.
 
 ### Running the client scripts from your laptop
 
@@ -162,6 +163,54 @@ Compare adapters side by side (needs the tunnel): `uv run scripts/demo_multilora
 
 Run `export MSYS_NO_PATHCONV=1 PYTHONUTF8=1` first. Without it, Git Bash rewrites `/adapters/...` arguments into Windows paths and LoRA loads return 404.
 </details>
+
+## Configuration
+
+Three places hold settings. None of them is ever committed: `.gitignore` covers `.env`, and secrets live in GitHub.
+
+### 1. GPU host: `.env`
+
+Copy [`.env.example`](.env.example) to `.env`. Every service reads it; `.env` is also sourced by bash, so write `--flag=value` (no spaces) inside values.
+
+| Variable | Default | What it does |
+|---|---|---|
+| `GATEWAY_KEY` | *(required)* | The one bearer token Caddy accepts; also vLLM's `--api-key`. `A–Z a–z 0–9 _ -`, ≥ 32 characters |
+| `HF_TOKEN` | empty | Optional: every pinned model and adapter is public |
+| `MODEL_REVISION`, `AWQ_REVISION`, `VLLM_IMAGE`, `CADDY_IMAGE` | pinned | Commit hashes and `@sha256` digests. Change only on purpose |
+| `MAX_MODEL_LEN` | `8192` | Longest prompt + answer, in tokens |
+| `GPU_MEMORY_UTILIZATION` | `0.90` | Share of VRAM vLLM may use (vLLM's own default is 1.0) |
+| `KV_CACHE_MEMORY_BYTES` | empty | Pins the KV pool, e.g. `4G` (used to emulate an L4 on a bigger GPU) |
+| `KV_CACHE_DTYPE_FP8_SUPPORTED` | `true` | `false` on Ampere: skips the fp8 KV cache |
+| `VLLM_ENABLE_CUDA_COMPATIBILITY` | `0` | `1` if the host driver is older than R580 |
+| `VLLM_EXTRA_ARGS` | empty | Appended to `vllm serve`, e.g. `--kv-cache-dtype=fp8` |
+| `SITE_ADDRESS` | `:80` | `:80` = plain HTTP on the host's IP. A domain name = automatic HTTPS (see below) |
+| `PUBLIC_PORT` / `PUBLIC_TLS_PORT` | `80` / `443` | Host ports for HTTP / HTTPS |
+
+Other GPUs: start from [`profiles/<GPU>.env`](profiles/). The Actions deploy builds the VM's `.env` from that file plus the secrets below.
+
+**HTTPS.** Set `SITE_ADDRESS=your.domain` (DNS pointing at the host, ports 80 and 443 open) and run `scripts/up.sh <profile>`; Caddy gets and renews a Let's Encrypt certificate by itself. With no domain, `<ip-with-dashes>.sslip.io` resolves to the host's IP and works the same way. The Actions `client-…` steps call `http://<vm-ip>`, so they assume the default `SITE_ADDRESS=:80`.
+
+### 2. Laptop: `.env` in your clone
+
+| Variable | Used by |
+|---|---|
+| `GATEWAY_KEY` | the client scripts (`smoke_test.sh`, `uv run scripts/…`); same value as the host |
+| `JARVISLABS_API_KEY` | `scripts/tunnel.sh` (finds the VM's IP, opens the metrics tunnel) |
+
+Plus `BASE_URL=http://<host-ip>` in your shell, and `REPO=<you>/<fork>` for `scripts/remote.sh` if you forked.
+
+### 3. GitHub Actions: repository secrets (only for the buttons)
+
+You need these only to drive a Jarvislabs VM from the Actions tab of **your fork**. Everything else in this repo runs by hand with no secrets at all.
+
+| Secret | What | Set it with |
+|---|---|---|
+| `JL_API_KEY` | Jarvislabs API key | `gh secret set JL_API_KEY` |
+| `JL_SSH_PRIVATE_KEY` | private half of an SSH key registered with `jl ssh-key add` | `gh secret set JL_SSH_PRIVATE_KEY < ~/.ssh/mags_jl` |
+| `GATEWAY_KEY` | written into the VM's `.env` on every deploy/resume; must match your laptop `.env` | `gh secret set GATEWAY_KEY` |
+| `HF_TOKEN` | optional | `gh secret set HF_TOKEN` |
+
+`gh secret set NAME` prompts for the value without echoing it. The workflows find the VM by the name `mags-mlops-prod-demo` (`VM_NAME` at the top of [`demo-gpu.yml`](.github/workflows/demo-gpu.yml) and [`lab.yml`](.github/workflows/lab.yml)), so create yours with that name or change both. Then run **demo-gpu → provision**, and every lab button works. Logs are public on a public fork; the workflows mask the VM's IP and id.
 
 ## Run the whole workshop from GitHub Actions
 
