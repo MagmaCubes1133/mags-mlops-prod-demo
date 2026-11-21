@@ -1,0 +1,35 @@
+lab	step	scripts (repo files this step runs or reads, in call order)
+common	status	scripts/lab.sh
+common	logs	scripts/lab.sh
+common	restart	scripts/lab.sh
+common	down	scripts/lab.sh docker-compose.yml
+common	capture	scripts/lab.sh
+common	client-smoke	scripts/smoke_test.sh
+lab1	up	scripts/lab.sh scripts/up.sh docker-compose.yml
+lab1	bootlog	scripts/lab.sh
+lab1	nvidia-smi	scripts/lab.sh
+lab2	edge-up	scripts/lab.sh docker-compose.yml Caddyfile
+lab2	caddy-validate	scripts/lab.sh Caddyfile
+lab2	caddy-reload	scripts/lab.sh Caddyfile
+lab2	show-config	scripts/lab.sh docker-compose.yml Caddyfile
+lab2	client-smoke	scripts/smoke_test.sh
+lab2	client-stream	.github/workflows/lab.yml
+lab2	client-structured-output	scripts/demo_structured_output.py
+lab3	metrics	scripts/lab.sh
+lab3	prefix-cache	scripts/lab.sh
+lab3	client-prefix-cache	scripts/demo_prefix_cache.py
+lab3	client-prefix-cache-8k	scripts/demo_prefix_cache.py
+break	awq-warm	scripts/lab.sh scripts/up.sh docker-compose.yml
+lab4	switch	scripts/lab.sh scripts/up.sh docker-compose.yml
+lab4	vram-math	scripts/lab.sh scripts/vram_math.py
+lab4	metrics-watch	scripts/lab.sh
+lab4	client-bench-sweep	scripts/benchmark_concurrency.py
+lab4	client-bench-pressure	scripts/benchmark_concurrency.py
+lab5	lora-up	scripts/lab.sh scripts/up.sh docker-compose.yml
+lab5	lora-status	scripts/lab.sh
+lab5	make-v2	scripts/lab.sh scripts/make_regressed_adapter.py
+lab5	lora-swap	scripts/lab.sh
+lab5	client-lora-rollout	scripts/demo_multilora_rollout.py
+lab5	client-lora-compare	scripts/demo_multilora_rollout.py
+lab6	client-stream	.github/workflows/lab.yml
+lab6	drain	scripts/lab.sh docker-compose.yml

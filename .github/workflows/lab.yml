@@ -14,6 +14,7 @@ on:
       sync: { type: boolean, default: true }
       label: { type: string, default: run }
       duration: { type: string, default: "180" }
+      delay: { type: number, default: 0 }   # rehearsal.yml: start this step N s late (e.g. a swap mid-traffic)
 
 permissions:
   contents: read
@@ -29,6 +30,7 @@ env:
   SYNC: ${{ inputs.sync }}
   LABEL: ${{ inputs.label }}
   DURATION: ${{ inputs.duration }}
+  DELAY: ${{ inputs.delay }}
 
 jobs:
   vm:
@@ -75,21 +77,27 @@ jobs:
           JL_API_KEY: ${{ secrets.JL_API_KEY }}
         run: |
           source .github/jl.sh
+          source .github/report.sh
           read -r STEP ARG <<<"$STEP_IN"
           set +e
-          t=$(date +%s)
           cmd="cd $REPO_DIR && bash scripts/lab.sh $(printf '%q %q %q' "$LAB" "$STEP" "${ARG:-}")"
-          echo ">>> $LAB $STEP_IN"   # remote.sh prints what is between >>> and <<<
+          show="bash scripts/lab.sh $LAB $STEP_IN"
+          where="VM (${VM_GPU}) over SSH, in ~/mags-mlops-prod-demo"
+          if [ "${DELAY:-0}" -gt 0 ]; then echo "waiting ${DELAY}s before $STEP_IN"; sleep "$DELAY"; fi
+          t=$(date +%s)
+          report_header "$where" "$show"
           vm_exec "$cmd" 2>&1 | grep -v '^Executing on' | sed -uE 's/\b([0-9]{1,3}\.){3}[0-9]{1,3}\b/<ip>/g' | tee out.txt
           rc=${PIPESTATUS[0]}
           echo "<<< exit $rc"
-          {
-            echo "### $LAB $STEP_IN → exit $rc in $(( $(date +%s) - t ))s"
-            echo '```'; tail -n 60 out.txt; echo '```'
-          } >> "$GITHUB_STEP_SUMMARY"
+          report_summary "$rc" "$(( $(date +%s) - t ))" out.txt "$where" "$show"
           dir=$(sed -n 's/^ARTIFACT_DIR=//p' out.txt | tail -1)
           [[ $dir =~ ^results/lab/[A-Za-z0-9._-]+$ ]] && echo "ARTIFACT_DIR=$dir" >> "$GITHUB_ENV"
           exit "$rc"
+      - uses: actions/upload-artifact@v4
+        if: always() && env.ART_NAME != ''
+        with:
+          name: log-${{ env.ART_NAME }}
+          path: out.txt
       - name: Fetch artifact from VM
         if: always() && env.ARTIFACT_DIR != ''
         env:
@@ -100,7 +108,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always() && env.ARTIFACT_DIR != ''
         with:
-          name: mags-mlops-prod-demo-${{ inputs.lab }}-${{ github.run_id }}
+          name: capture-${{ env.ART_NAME }}
           path: lab-artifact/
 
   client:
@@ -167,20 +175,30 @@ jobs:
             lora-compare)      cmd=(uv run -q scripts/demo_multilora_rollout.py compare /adapters/sql-v1 /adapters/sql-v2) ;;
             *) echo "::error::unknown client step $STEP_IN"; exit 1 ;;
           esac
-          t=$(date +%s)
+          source .github/report.sh
+          if [ "${cmd[0]}" = stream ]; then
+            show="curl -sN \$BASE_URL/v1/chat/completions -H 'Authorization: Bearer \$GATEWAY_KEY' -d '{\"model\":\"qwen2.5-7b\",\"stream\":true,\"max_tokens\":900,…}'"
+          else
+            show="BASE_URL=http://<vm-ip> GATEWAY_KEY=… ${cmd[*]}"
+          fi
+          where="GitHub-hosted runner → public endpoint http://<vm-ip> (GPU ${VM_GPU}); metrics via SSH tunnel"
           set +e
-          echo ">>> $LAB $STEP_IN"   # remote.sh prints what is between >>> and <<<
+          if [ "${DELAY:-0}" -gt 0 ]; then echo "waiting ${DELAY}s before $STEP_IN"; sleep "$DELAY"; fi
+          t=$(date +%s)
+          report_header "$where" "$show"
           "${cmd[@]}" 2>&1 | sed -uE 's/\b([0-9]{1,3}\.){3}[0-9]{1,3}\b/<ip>/g' | tee out.txt
           rc=${PIPESTATUS[0]}
           echo "<<< exit $rc"
-          {
-            echo "### $LAB $STEP_IN → exit $rc in $(( $(date +%s) - t ))s (GitHub-hosted runner → public endpoint, GPU $VM_GPU)"
-            echo '```'; tail -n 60 out.txt; echo '```'
-          } >> "$GITHUB_STEP_SUMMARY"
+          report_summary "$rc" "$(( $(date +%s) - t ))" out.txt "$where" "$show"
           exit "$rc"
+      - uses: actions/upload-artifact@v4
+        if: always() && env.ART_NAME != ''
+        with:
+          name: log-${{ env.ART_NAME }}
+          path: out.txt
       - uses: actions/upload-artifact@v4
         if: always() && startsWith(inputs.step, 'client-bench-')
         with:
-          name: mags-mlops-prod-demo-${{ inputs.lab }}-bench-${{ github.run_id }}
+          name: bench-${{ env.ART_NAME }}
           path: results/bench-${{ inputs.label }}*.csv
           if-no-files-found: ignore

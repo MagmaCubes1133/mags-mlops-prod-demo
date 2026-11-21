@@ -1,0 +1,467 @@
+# Rehearsal: every step of every lab, in run-sheet order, through the same engine the lab buttons use.
+# One click, ~45 min on the L4. Interplay is real: rollout traffic while lora-swap v2/v1 run, a stream while drain runs.
+# A failed step does not stop the rest (if: !cancelled()); the last job prints a pass/fail table. Ends on the lora profile.
+name: "Rehearsal · all labs"
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: mags-mlops-prod-demo-rehearsal
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  common_status:
+    name: "01 common status"
+    uses: ./.github/workflows/lab.yml
+    with:
+      lab: common
+      step: "status"
+      sync: true
+    secrets: inherit
+  common_down:
+    name: "02 common down"
+    needs: [common_status]
+    if: ${{ !cancelled() }}
+    uses: ./.github/workflows/lab.yml
+    with:
+      lab: common
+      step: "down"
+      sync: false
+    secrets: inherit
+  lab1_up:
+    name: "03 lab1 up"
+    needs: [common_down]
+    if: ${{ !cancelled() }}
+    uses: ./.github/workflows/lab.yml
+    with:
+      lab: lab1
+      step: "up"
+      sync: false
+    secrets: inherit
+  lab1_bootlog:
+    name: "04 lab1 bootlog"
+    needs: [lab1_up]
+    if: ${{ !cancelled() }}
+    uses: ./.github/workflows/lab.yml
+    with:
+      lab: lab1
+      step: "bootlog"
+      sync: false
+    secrets: inherit
+  lab1_nvidia_smi:
+    name: "05 lab1 nvidia-smi"
+    needs: [lab1_bootlog]
+    if: ${{ !cancelled() }}
+    uses: ./.github/workflows/lab.yml
+    with:
+      lab: lab1
+      step: "nvidia-smi"
+      sync: false
+    secrets: inherit
+  lab2_edge_up:
+    name: "06 lab2 edge-up"
+    needs: [lab1_nvidia_smi]
+    if: ${{ !cancelled() }}
+    uses: ./.github/workflows/lab.yml
+    with:
+      lab: lab2
+      step: "edge-up"
+      sync: false
+    secrets: inherit
+  lab2_caddy_validate:
+    name: "07 lab2 caddy-validate"
+    needs: [lab2_edge_up]
+    if: ${{ !cancelled() }}
+    uses: ./.github/workflows/lab.yml
+    with:
+      lab: lab2
+      step: "caddy-validate"
+      sync: false
+    secrets: inherit
+  lab2_caddy_reload:
+    name: "08 lab2 caddy-reload"
+    needs: [lab2_caddy_validate]
+    if: ${{ !cancelled() }}
+    uses: ./.github/workflows/lab.yml
+    with:
+      lab: lab2
+      step: "caddy-reload"
+      sync: false
+    secrets: inherit
+  lab2_show_config:
+    name: "09 lab2 show-config"
+    needs: [lab2_caddy_reload]
+    if: ${{ !cancelled() }}
+    uses: ./.github/workflows/lab.yml
+    with:
+      lab: lab2
+      step: "show-config"
+      sync: false
+    secrets: inherit
+  lab2_client_smoke:
+    name: "10 lab2 client-smoke"
+    needs: [lab2_show_config]
+    if: ${{ !cancelled() }}
+    uses: ./.github/workflows/lab.yml
+    with:
+      lab: lab2
+      step: "client-smoke"
+      sync: false
+    secrets: inherit
+  lab2_client_stream:
+    name: "11 lab2 client-stream"
+    needs: [lab2_client_smoke]
+    if: ${{ !cancelled() }}
+    uses: ./.github/workflows/lab.yml
+    with:
+      lab: lab2
+      step: "client-stream"
+      sync: false
+    secrets: inherit
+  lab2_client_structured_output:
+    name: "12 lab2 client-structured-output"
+    needs: [lab2_client_stream]
+    if: ${{ !cancelled() }}
+    uses: ./.github/workflows/lab.yml
+    with:
+      lab: lab2
+      step: "client-structured-output"
+      sync: false
+    secrets: inherit
+  lab3_metrics:
+    name: "13 lab3 metrics"
+    needs: [lab2_client_structured_output]
+    if: ${{ !cancelled() }}
+    uses: ./.github/workflows/lab.yml
+    with:
+      lab: lab3
+      step: "metrics"
+      sync: false
+    secrets: inherit
+  lab3_metrics_kv_cache:
+    name: "14 lab3 metrics kv_cache"
+    needs: [lab3_metrics]
+    if: ${{ !cancelled() }}
+    uses: ./.github/workflows/lab.yml
+    with:
+      lab: lab3
+      step: "metrics kv_cache"
+      sync: false
+    secrets: inherit
+  lab3_client_prefix_cache:
+    name: "15 lab3 client-prefix-cache"
+    needs: [lab3_metrics_kv_cache]
+    if: ${{ !cancelled() }}
+    uses: ./.github/workflows/lab.yml
+    with:
+      lab: lab3
+      step: "client-prefix-cache"
+      sync: false
+    secrets: inherit
+  lab3_client_prefix_cache_8k:
+    name: "16 lab3 client-prefix-cache-8k"
+    needs: [lab3_client_prefix_cache]
+    if: ${{ !cancelled() }}
+    uses: ./.github/workflows/lab.yml
+    with:
+      lab: lab3
+      step: "client-prefix-cache-8k"
+      sync: false
+    secrets: inherit
+  lab3_prefix_cache:
+    name: "17 lab3 prefix-cache"
+    needs: [lab3_client_prefix_cache_8k]
+    if: ${{ !cancelled() }}
+    uses: ./.github/workflows/lab.yml
+    with:
+      lab: lab3
+      step: "prefix-cache"
+      sync: false
+    secrets: inherit
+  break_awq_warm:
+    name: "18 break awq-warm"
+    needs: [lab3_prefix_cache]
+    if: ${{ !cancelled() }}
+    uses: ./.github/workflows/lab.yml
+    with:
+      lab: break
+      step: "awq-warm"
+      sync: false
+    secrets: inherit
+  lab4_vram_math:
+    name: "19 lab4 vram-math"
+    needs: [break_awq_warm]
+    if: ${{ !cancelled() }}
+    uses: ./.github/workflows/lab.yml
+    with:
+      lab: lab4
+      step: "vram-math"
+      sync: false
+    secrets: inherit
+  lab4_client_bench_sweep_awq:
+    name: "20 lab4 client-bench-sweep"
+    needs: [lab4_vram_math]
+    if: ${{ !cancelled() }}
+    uses: ./.github/workflows/lab.yml
+    with:
+      lab: lab4
+      step: "client-bench-sweep"
+      sync: false
+      label: rehearsal-awq
+    secrets: inherit
+  lab4_client_bench_pressure_awq:
+    name: "21 lab4 client-bench-pressure"
+    needs: [lab4_client_bench_sweep_awq]
+    if: ${{ !cancelled() }}
+    uses: ./.github/workflows/lab.yml
+    with:
+      lab: lab4
+      step: "client-bench-pressure"
+      sync: false
+      label: rehearsal-awq
+    secrets: inherit
+  lab4_switch_fp8:
+    name: "22 lab4 switch fp8"
+    needs: [lab4_client_bench_pressure_awq]
+    if: ${{ !cancelled() }}
+    uses: ./.github/workflows/lab.yml
+    with:
+      lab: lab4
+      step: "switch fp8"
+      sync: false
+    secrets: inherit
+  lab4_switch_fp8_kv:
+    name: "23 lab4 switch fp8-kv"
+    needs: [lab4_switch_fp8]
+    if: ${{ !cancelled() }}
+    uses: ./.github/workflows/lab.yml
+    with:
+      lab: lab4
+      step: "switch fp8-kv"
+      sync: false
+    secrets: inherit
+  lab4_switch_baseline:
+    name: "24 lab4 switch baseline"
+    needs: [lab4_switch_fp8_kv]
+    if: ${{ !cancelled() }}
+    uses: ./.github/workflows/lab.yml
+    with:
+      lab: lab4
+      step: "switch baseline"
+      sync: false
+    secrets: inherit
+  lab4_metrics_watch_start:
+    name: "25 lab4 metrics-watch start"
+    needs: [lab4_switch_baseline]
+    if: ${{ !cancelled() }}
+    uses: ./.github/workflows/lab.yml
+    with:
+      lab: lab4
+      step: "metrics-watch start"
+      sync: false
+    secrets: inherit
+  lab4_client_bench_pressure_bf16:
+    name: "26 lab4 client-bench-pressure"
+    needs: [lab4_metrics_watch_start]
+    if: ${{ !cancelled() }}
+    uses: ./.github/workflows/lab.yml
+    with:
+      lab: lab4
+      step: "client-bench-pressure"
+      sync: false
+      label: rehearsal-bf16
+    secrets: inherit
+  lab4_metrics_watch_stop:
+    name: "27 lab4 metrics-watch stop"
+    needs: [lab4_client_bench_pressure_bf16]
+    if: ${{ !cancelled() }}
+    uses: ./.github/workflows/lab.yml
+    with:
+      lab: lab4
+      step: "metrics-watch stop"
+      sync: false
+    secrets: inherit
+  lab5_lora_up:
+    name: "28 lab5 lora-up"
+    needs: [lab4_metrics_watch_stop]
+    if: ${{ !cancelled() }}
+    uses: ./.github/workflows/lab.yml
+    with:
+      lab: lab5
+      step: "lora-up"
+      sync: false
+    secrets: inherit
+  lab5_lora_status:
+    name: "29 lab5 lora-status"
+    needs: [lab5_lora_up]
+    if: ${{ !cancelled() }}
+    uses: ./.github/workflows/lab.yml
+    with:
+      lab: lab5
+      step: "lora-status"
+      sync: false
+    secrets: inherit
+  lab5_make_v2:
+    name: "30 lab5 make-v2"
+    needs: [lab5_lora_status]
+    if: ${{ !cancelled() }}
+    uses: ./.github/workflows/lab.yml
+    with:
+      lab: lab5
+      step: "make-v2"
+      sync: false
+    secrets: inherit
+  lab5_client_lora_compare:
+    name: "31 lab5 client-lora-compare"
+    needs: [lab5_make_v2]
+    if: ${{ !cancelled() }}
+    uses: ./.github/workflows/lab.yml
+    with:
+      lab: lab5
+      step: "client-lora-compare"
+      sync: false
+    secrets: inherit
+  lab5_client_lora_rollout:
+    name: "32 lab5 client-lora-rollout"
+    needs: [lab5_client_lora_compare]
+    if: ${{ !cancelled() }}
+    uses: ./.github/workflows/lab.yml
+    with:
+      lab: lab5
+      step: "client-lora-rollout"
+      sync: false
+      duration: "150"
+    secrets: inherit
+  lab5_lora_swap_v2:
+    name: "33 lab5 lora-swap v2"
+    needs: [lab5_client_lora_compare]
+    if: ${{ !cancelled() }}
+    uses: ./.github/workflows/lab.yml
+    with:
+      lab: lab5
+      step: "lora-swap v2"
+      sync: false
+      delay: 55
+    secrets: inherit
+  lab5_lora_swap_v1:
+    name: "34 lab5 lora-swap v1"
+    needs: [lab5_lora_swap_v2]
+    if: ${{ !cancelled() }}
+    uses: ./.github/workflows/lab.yml
+    with:
+      lab: lab5
+      step: "lora-swap v1"
+      sync: false
+      delay: 10
+    secrets: inherit
+  lab6_client_stream:
+    name: "35 lab6 client-stream"
+    needs: [lab5_client_lora_rollout, lab5_lora_swap_v1]
+    if: ${{ !cancelled() }}
+    uses: ./.github/workflows/lab.yml
+    with:
+      lab: lab6
+      step: "client-stream"
+      sync: false
+    secrets: inherit
+  lab6_drain:
+    name: "36 lab6 drain"
+    needs: [lab5_client_lora_rollout, lab5_lora_swap_v1]
+    if: ${{ !cancelled() }}
+    uses: ./.github/workflows/lab.yml
+    with:
+      lab: lab6
+      step: "drain"
+      sync: false
+      delay: 30
+    secrets: inherit
+  lab6_restart:
+    name: "37 common restart"
+    needs: [lab6_client_stream, lab6_drain]
+    if: ${{ !cancelled() }}
+    uses: ./.github/workflows/lab.yml
+    with:
+      lab: common
+      step: "restart"
+      sync: false
+    secrets: inherit
+  common_logs_vllm:
+    name: "38 common logs vllm"
+    needs: [lab6_restart]
+    if: ${{ !cancelled() }}
+    uses: ./.github/workflows/lab.yml
+    with:
+      lab: common
+      step: "logs vllm"
+      sync: false
+    secrets: inherit
+  common_logs_caddy:
+    name: "39 common logs caddy"
+    needs: [common_logs_vllm]
+    if: ${{ !cancelled() }}
+    uses: ./.github/workflows/lab.yml
+    with:
+      lab: common
+      step: "logs caddy"
+      sync: false
+    secrets: inherit
+  common_capture:
+    name: "40 common capture"
+    needs: [common_logs_caddy]
+    if: ${{ !cancelled() }}
+    uses: ./.github/workflows/lab.yml
+    with:
+      lab: common
+      step: "capture"
+      sync: false
+    secrets: inherit
+  common_client_smoke:
+    name: "41 common client-smoke"
+    needs: [common_capture]
+    if: ${{ !cancelled() }}
+    uses: ./.github/workflows/lab.yml
+    with:
+      lab: common
+      step: "client-smoke"
+      sync: false
+    secrets: inherit
+  common_status_end:
+    name: "42 common status"
+    needs: [common_client_smoke]
+    if: ${{ !cancelled() }}
+    uses: ./.github/workflows/lab.yml
+    with:
+      lab: common
+      step: "status"
+      sync: false
+    secrets: inherit
+  report:
+    needs: [common_status, common_down, lab1_up, lab1_bootlog, lab1_nvidia_smi, lab2_edge_up, lab2_caddy_validate, lab2_caddy_reload, lab2_show_config, lab2_client_smoke, lab2_client_stream, lab2_client_structured_output, lab3_metrics, lab3_metrics_kv_cache, lab3_client_prefix_cache, lab3_client_prefix_cache_8k, lab3_prefix_cache, break_awq_warm, lab4_vram_math, lab4_client_bench_sweep_awq, lab4_client_bench_pressure_awq, lab4_switch_fp8, lab4_switch_fp8_kv, lab4_switch_baseline, lab4_metrics_watch_start, lab4_client_bench_pressure_bf16, lab4_metrics_watch_stop, lab5_lora_up, lab5_lora_status, lab5_make_v2, lab5_client_lora_compare, lab5_client_lora_rollout, lab5_lora_swap_v2, lab5_lora_swap_v1, lab6_client_stream, lab6_drain, lab6_restart, common_logs_vllm, common_logs_caddy, common_capture, common_client_smoke, common_status_end]
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Pass/fail table
+        env:
+          NEEDS: ${{ toJSON(needs) }}
+        run: |
+          order='common_status common_down lab1_up lab1_bootlog lab1_nvidia_smi lab2_edge_up lab2_caddy_validate lab2_caddy_reload lab2_show_config lab2_client_smoke lab2_client_stream lab2_client_structured_output lab3_metrics lab3_metrics_kv_cache lab3_client_prefix_cache lab3_client_prefix_cache_8k lab3_prefix_cache break_awq_warm lab4_vram_math lab4_client_bench_sweep_awq lab4_client_bench_pressure_awq lab4_switch_fp8 lab4_switch_fp8_kv lab4_switch_baseline lab4_metrics_watch_start lab4_client_bench_pressure_bf16 lab4_metrics_watch_stop lab5_lora_up lab5_lora_status lab5_make_v2 lab5_client_lora_compare lab5_client_lora_rollout lab5_lora_swap_v2 lab5_lora_swap_v1 lab6_client_stream lab6_drain lab6_restart common_logs_vllm common_logs_caddy common_capture common_client_smoke common_status_end'
+          {
+            echo "## Rehearsal: all labs"
+            echo
+            echo "| # | Lab | Step | Result |"
+            echo "|---|---|---|---|"
+            i=0
+            for id in $order; do
+              i=$((i + 1))
+              r=$(jq -r --arg id "$id" '.[$id].result' <<<"$NEEDS")
+              case $r in success) icon="✅";; skipped) icon="⏭️";; *) icon="❌";; esac
+              echo "| $i | ${id%%_*} | ${id#*_} | $icon $r |"
+            done
+            echo
+            echo "Each step's own summary (scripts, command, highlights, full output) is on this run's page under its job."
+          } >> "$GITHUB_STEP_SUMMARY"
+          ! jq -e 'any(.[]; .result != "success")' <<<"$NEEDS" > /dev/null
