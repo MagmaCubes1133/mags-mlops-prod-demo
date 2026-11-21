@@ -79,8 +79,10 @@ jobs:
           set +e
           t=$(date +%s)
           cmd="cd $REPO_DIR && bash scripts/lab.sh $(printf '%q %q %q' "$LAB" "$STEP" "${ARG:-}")"
+          echo ">>> $LAB $STEP_IN"   # remote.sh prints what is between >>> and <<<
           vm_exec "$cmd" 2>&1 | grep -v '^Executing on' | sed -uE 's/\b([0-9]{1,3}\.){3}[0-9]{1,3}\b/<ip>/g' | tee out.txt
           rc=${PIPESTATUS[0]}
+          echo "<<< exit $rc"
           {
             echo "### $LAB $STEP_IN → exit $rc in $(( $(date +%s) - t ))s"
             echo '```'; tail -n 60 out.txt; echo '```'
@@ -167,8 +169,10 @@ jobs:
           esac
           t=$(date +%s)
           set +e
+          echo ">>> $LAB $STEP_IN"   # remote.sh prints what is between >>> and <<<
           "${cmd[@]}" 2>&1 | sed -uE 's/\b([0-9]{1,3}\.){3}[0-9]{1,3}\b/<ip>/g' | tee out.txt
           rc=${PIPESTATUS[0]}
+          echo "<<< exit $rc"
           {
             echo "### $LAB $STEP_IN → exit $rc in $(( $(date +%s) - t ))s (GitHub-hosted runner → public endpoint, GPU $VM_GPU)"
             echo '```'; tail -n 60 out.txt; echo '```'
