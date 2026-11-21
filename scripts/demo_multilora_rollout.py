@@ -97,6 +97,7 @@ async def rollout(args, client: httpx.AsyncClient, ops: httpx.AsyncClient | None
         text = r.json()["choices"][0]["text"].strip() if r.status_code == 200 else f"HTTP {r.status_code}"
         print(f"[{time.perf_counter() - t0:5.1f}s {tag}] sql-prod -> {text[:160]!r}", flush=True)
 
+    print("traffic prompts (one per model):", *(f"{m}: {p!r}" for m, p in prompts.items()), sep="\n  ")
     workers = [asyncio.create_task(worker(m)) for m in prompts for _ in range(args.workers)]
     if args.swap_mode == "inline":
         phase = args.duration / 3
@@ -128,6 +129,8 @@ async def rollout(args, client: httpx.AsyncClient, ops: httpx.AsyncClient | None
 
 
 async def compare(args, client: httpx.AsyncClient, ops: httpx.AsyncClient) -> int:
+    print(f"prompt template (the sql adapter's training format): {SQL_PROMPT!r}")
+    print("cases:", *(f"{db} | {q}" for db, q in SQL_CASES), sep="\n  ")
     for i, path in enumerate(args.paths):
         name = f"cmp-{i}"
         await load_adapter(ops, name, path, True)

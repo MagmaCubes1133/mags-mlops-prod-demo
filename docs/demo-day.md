@@ -29,8 +29,9 @@ No terminal on stage. In the repo's **Actions** tab each lab is one workflow; pi
 export MSYS_NO_PATHCONV=1 PYTHONUTF8=1      # Git Bash: keep /adapters/... paths intact; UTF-8 output
 # .env in the repo root: GATEWAY_KEY=... and JARVISLABS_API_KEY=... (never shown on screen)
 gh auth status && uv --version && ls ~/.ssh/mags_jl
-export BASE_URL=http://$(scripts/tunnel.sh ip)
-L() { ssh -i ~/.ssh/mags_jl "ubuntu@${BASE_URL#http://}" "bash mags-mlops-prod-demo/scripts/lab.sh $*"; }
+export BASE_URL=$(scripts/tunnel.sh url)          # https://<ip-with-dashes>.sslip.io (falls back to http://<ip>)
+VM=$(scripts/tunnel.sh ip)
+L() { ssh -i ~/.ssh/mags_jl "ubuntu@$VM" "bash mags-mlops-prod-demo/scripts/lab.sh $*"; }
 scripts/tunnel.sh                            # 2nd terminal, keep open: localhost:9090 = metrics + LoRA admin
 ```
 
@@ -42,7 +43,7 @@ scripts/tunnel.sh                            # 2nd terminal, keep open: localhos
 | T-24 h | `jl status` balance | **≥ ₹1,000** (H200 start needs ≈ ₹440 of it). Paused disk is billed daily; top up if close |
 | T-24 h | `gh workflow run demo-gpu.yml -f action=resume -f gpu=L4 -f profile=baseline` | green: resume + deploy + SMOKE OK (≈ 4 min) |
 | T-24 h | Actions → **Rehearsal · all labs** | every row ✅ in the final table (≈ 36 min) |
-| T-24 h | dashboard: the VM shows the reserved IP; `scripts/tunnel.sh ip` prints the same address as last time | same IP across pause/resume |
+| T-24 h | dashboard: the VM shows the reserved IP; `scripts/tunnel.sh url` prints the same `https://…sslip.io` as last time; the demo-gpu verify step shows `https://<vm-host>/health → 200` and a Let's Encrypt issuer | same IP, valid certificate |
 | T-24 h | `gh workflow run demo-gpu.yml -f action=pause -f gpu=L4` | VM `Paused` |
 | T-60 min | same `resume` run | green, SMOKE OK |
 | T-60 min | [githubstatus.com](https://www.githubstatus.com): Actions operational | if not: run the same steps over SSH (`L <lab> <step>`), and use the BK-02 recordings |

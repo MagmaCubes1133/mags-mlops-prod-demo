@@ -161,6 +161,8 @@ jobs:
           export BASE_URL   # set by the previous step: https://<vm-host> or http://<vm-ip>
           # shellcheck disable=SC2329  # invoked via cmd=(stream)
           stream() {
+            echo 'prompt: "Explain, step by step and in detail, how a GPU serves many chat users at once."'
+            echo '--- streamed answer:'
             curl -sN "$BASE_URL/v1/chat/completions" -H "Authorization: Bearer $GATEWAY_KEY" -H 'Content-Type: application/json' \
               -d '{"model":"qwen2.5-7b","stream":true,"max_tokens":900,"messages":[{"role":"user","content":"Explain, step by step and in detail, how a GPU serves many chat users at once."}]}' \
               | tee raw.sse | sed -un 's/^data: //p' | grep --line-buffered -v '^\[DONE\]' | jq --unbuffered -rj '.choices[0].delta.content // empty'

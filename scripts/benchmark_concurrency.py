@@ -194,6 +194,7 @@ def main() -> None:
     args.concurrency = args.concurrency or ([32] if pressure else [1, 8, 20, 32])
     args.rounds = args.rounds or (1 if pressure else 3)
     args.max_tokens = args.max_tokens or (1024 if pressure else 256)
+    print(f"prompt: {PROMPT!r}" + (" x185, unique prefix per request (~3k tokens)" if pressure else "") + f", max_tokens={args.max_tokens}")
     if not asyncio.run(scrape(httpx.AsyncClient(base_url=args.metrics_url, timeout=3) if args.metrics_url else None)):
         print(
             f"metrics: {args.metrics_url or '-'} unreachable -> skipping kv peak / preemptions (open scripts/tunnel.sh)"

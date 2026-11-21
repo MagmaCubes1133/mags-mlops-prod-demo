@@ -63,6 +63,7 @@ def main() -> int:
             "response_format": {"type": "json_schema", "json_schema": {"name": "city", "schema": SCHEMA}}
         },
     }
+    print(f"prompt (same for every variant): {MESSAGES[0]['content']!r}\nschema: {json.dumps(SCHEMA)}")
     results = {}
     with httpx.Client(base_url=base, headers=headers, timeout=120) as c:
         for name, extra in variants.items():

@@ -96,6 +96,7 @@ def main() -> None:
         httpx.Client(base_url=os.environ.get("METRICS_URL", "http://127.0.0.1:9090"), timeout=3) as ops,
     ):
         before = counters(ops)
+        print(f"system prompt: {POLICY[:90]!r}... x{ap.parse_args().repeat} (+ a per-run nonce)")
         results = []
         for p in (1, 2):
             messages = [{"role": "system", "content": system}]
@@ -104,7 +105,7 @@ def main() -> None:
                 ms, answer, n = ttft(c, messages)
                 messages.append({"role": "assistant", "content": answer})
                 results.append((p, i, ms))
-                print(f"pass {p} turn {i}: {n} prompt tokens, TTFT {ms:7.1f} ms  {answer[:60]!r}")
+                print(f"pass {p} turn {i}: {n} prompt tokens, TTFT {ms:7.1f} ms\n  user: {q}\n  assistant: {answer[:160]!r}")
         after = counters(ops)
 
     print("\n| turn | TTFT pass 1 (cold) ms | TTFT pass 2 (warm) ms |\n|---|---|---|")

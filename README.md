@@ -47,11 +47,11 @@ Prefix cache on an ~8k-token chat history: time to first token **2,247 ms → 13
 <p align="center"><img src="docs/slides/diagrams/d06_edge_architecture.png" alt="Client to Caddy to vLLM on a private network; the model server has no door to the outside" width="820"></p>
 
 ```
-client ──HTTP──► Caddy :80  (bearer auth · 401/403/413 · SSE flush)  ──internal network──► vLLM :8000 (never published)
+client ─HTTPS─► Caddy :443 (TLS · bearer auth · 401/403/413 · SSE flush)  ──internal network──► vLLM :8000 (never published)
 operator ─SSH tunnel─► Caddy 127.0.0.1:9090  (/metrics, LoRA load/unload)  ──────────────►
 ```
 
-The lab serves plain HTTP on port 80 of the VM (the diagram shows the HTTPS target). Metrics and the LoRA admin API are reachable only through the loopback operator listener, over an SSH tunnel.
+The public endpoint is HTTPS: `https://<ip-with-dashes>.sslip.io` with a Let's Encrypt certificate that Caddy obtains and renews itself (see [Configuration](#configuration)); on any host without that, it serves plain HTTP on port 80. Metrics and the LoRA admin API are reachable only through the loopback operator listener, over an SSH tunnel.
 
 ## Quickstart
 
@@ -81,7 +81,7 @@ curl -s localhost/v1/chat/completions -H "Authorization: Bearer $GATEWAY_KEY" -H
   -d '{"model":"qwen2.5-7b","temperature":0,"messages":[{"role":"user","content":"Hello"}]}'
 ```
 
-The endpoint is OpenAI-compatible, so the `openai` SDK works with `base_url="http://<host>/v1"`. Python scripts run with `uv run`; their dependencies are declared inline.
+The endpoint is OpenAI-compatible, so the `openai` SDK works with `base_url="https://<host>/v1"` (or `http://` on a plain-HTTP host). Python scripts run with `uv run`; their dependencies are declared inline.
 
 <details>
 <summary><b>Other GPUs</b></summary>
@@ -109,7 +109,7 @@ jl ssh <machine_id>
 
 **Step-by-step guide with the scripts behind every step: [`docs/labs.md`](docs/labs.md).**
 
-Every **VM-side** step has one entrypoint: `bash scripts/lab.sh <lab> <step> [arg]`. **Laptop-side** steps run against Caddy with `BASE_URL=http://<host>` and `GATEWAY_KEY` set. For metrics from a laptop, keep an SSH tunnel to port 9090 open (`scripts/tunnel.sh` for the Jarvislabs VM, otherwise `ssh -N -L 9090:127.0.0.1:9090 <you>@<host>`).
+Every **VM-side** step has one entrypoint: `bash scripts/lab.sh <lab> <step> [arg]`. **Laptop-side** steps run against Caddy with `BASE_URL=https://<host>` and `GATEWAY_KEY` set. For metrics from a laptop, keep an SSH tunnel to port 9090 open (`scripts/tunnel.sh` for the Jarvislabs VM, otherwise `ssh -N -L 9090:127.0.0.1:9090 <you>@<host>`).
 
 | Lab | On the GPU host (`lab.sh`) | On the laptop | You should see |
 |---|---|---|---|
@@ -125,7 +125,7 @@ Always available: `common status` (prints the active profile) · `common logs vl
 ### Endpoint and API key
 
 - **API key.** Caddy accepts exactly one bearer token: `GATEWAY_KEY` from the host's `.env`. You choose it. The Quickstart generates a random one; any value made of `A–Z a–z 0–9 _ -` works (use ≥ 32 characters). Change it in `.env`, then `bash scripts/up.sh <profile>` to restart Caddy with it.
-- **Endpoint.** `http://<host-ip>` on port 80; the API lives under `/v1`. On the GPU host itself, use `http://localhost`.
+- **Endpoint.** `https://<ip-with-dashes>.sslip.io` when HTTPS is on (the Actions deploy turns it on), else `http://<host-ip>`; the API lives under `/v1`. On the GPU host itself, `http://localhost` always works.
 - **Metrics and LoRA admin.** vLLM's port 8000 is never published, not even on the host. Use Caddy's operator listener: `curl 127.0.0.1:9090/metrics` on the host (or through the SSH tunnel), and `POST 127.0.0.1:9090/v1/load_lora_adapter` with the bearer header. The public site answers 403 on both.
 
 ### Running the client scripts from your laptop
@@ -135,7 +135,7 @@ Every laptop-side script reads `BASE_URL` (default `http://localhost`) and `GATE
 ```bash
 # in your local clone; .env holds the same GATEWAY_KEY as the GPU host
 set -a; . ./.env; set +a                         # exports GATEWAY_KEY
-export BASE_URL=http://<host-ip>                 # Jarvislabs VM: export BASE_URL=http://$(scripts/tunnel.sh ip)
+export BASE_URL=https://<host>                   # Jarvislabs VM: export BASE_URL=$(scripts/tunnel.sh url)
 ssh -N -L 9090:127.0.0.1:9090 <you>@<host-ip> &  # optional: metrics + LoRA admin (Jarvislabs: scripts/tunnel.sh)
 
 bash scripts/smoke_test.sh                       # 401/403/413/400, /health, a stream, every model; metrics checks need the tunnel
@@ -183,12 +183,12 @@ Copy [`.env.example`](.env.example) to `.env`. Every service reads it; `.env` is
 | `KV_CACHE_DTYPE_FP8_SUPPORTED` | `true` | `false` on Ampere: skips the fp8 KV cache |
 | `VLLM_ENABLE_CUDA_COMPATIBILITY` | `0` | `1` if the host driver is older than R580 |
 | `VLLM_EXTRA_ARGS` | empty | Appended to `vllm serve`, e.g. `--kv-cache-dtype=fp8` |
-| `SITE_ADDRESS` | `:80` | `:80` = plain HTTP on the host's IP. A domain name = automatic HTTPS (see below) |
+| `SITE_ADDRESS` | `:80` | `:80` = plain HTTP on the host's IP. Host name(s) = automatic HTTPS (see below) |
 | `PUBLIC_PORT` / `PUBLIC_TLS_PORT` | `80` / `443` | Host ports for HTTP / HTTPS |
 
 Other GPUs: start from [`profiles/<GPU>.env`](profiles/). The Actions deploy builds the VM's `.env` from that file plus the secrets below.
 
-**HTTPS.** Set `SITE_ADDRESS=your.domain` (DNS pointing at the host, ports 80 and 443 open) and run `scripts/up.sh <profile>`; Caddy gets and renews a Let's Encrypt certificate by itself. With no domain, `<ip-with-dashes>.sslip.io` resolves to the host's IP and works the same way. The Actions `client-…` steps call `http://<vm-ip>`, so they assume the default `SITE_ADDRESS=:80`.
+**HTTPS.** The Actions deploy turns it on by default (`demo-gpu` input `https`): it sets `SITE_ADDRESS="<ip-with-dashes>.sslip.io http://localhost http://127.0.0.1"`. [sslip.io](https://sslip.io) resolves that name to the IP, Caddy gets and renews a Let's Encrypt certificate by itself (kept on the `caddy_data` volume), and `localhost` stays plain HTTP for the on-host health checks. By hand: put the same line (or your own domain) in `.env`, open ports 80 and 443, and run `scripts/up.sh <profile>`. Pair it with a fixed IP (Jarvislabs reserved IP): every new IP means a new certificate. The `client-…` steps use HTTPS when it answers and fall back to `http://<vm-ip>`.
 
 ### 2. Laptop: `.env` in your clone
 
@@ -197,7 +197,7 @@ Other GPUs: start from [`profiles/<GPU>.env`](profiles/). The Actions deploy bui
 | `GATEWAY_KEY` | the client scripts (`smoke_test.sh`, `uv run scripts/…`); same value as the host |
 | `JARVISLABS_API_KEY` | `scripts/tunnel.sh` (finds the VM's IP, opens the metrics tunnel) |
 
-Plus `BASE_URL=http://<host-ip>` in your shell, and `REPO=<you>/<fork>` for `scripts/remote.sh` if you forked.
+Plus `BASE_URL` in your shell (`$(scripts/tunnel.sh url)` on the Jarvislabs VM), and `REPO=<you>/<fork>` for `scripts/remote.sh` if you forked.
 
 ### 3. GitHub Actions: repository secrets (only for the buttons)
 
@@ -286,7 +286,7 @@ Steps without a prefix run `scripts/lab.sh <lab> <step>` on the VM (35–130 s);
 - **Lab steps without SSH:** `scripts/remote.sh <lab> <step> [arg]` dispatches that lab's workflow and streams the output (35–130 s per step). A failed VM sync fails the run.
 - Logs are public: the workflows mask every id and IP.
 - **The API key comes from the `GATEWAY_KEY` repo secret.** Every `provision`, `deploy`, `resume` and `swap-gpu` run writes it into the VM's `.env`. To change it, update the secret *and* your local `.env` to the same value, then run `action=deploy` (or the next `resume`).
-- **The endpoint is never in the logs.** Get it on your laptop with `scripts/tunnel.sh ip` (uses your Jarvislabs key). It changes on every resume.
+- **The endpoint is never in the logs.** Get it on your laptop with `scripts/tunnel.sh url` (uses your Jarvislabs key). With a Jarvislabs reserved IP it stays the same across resumes.
 
 </details>
 
