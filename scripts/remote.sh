@@ -28,6 +28,7 @@ done
 rc=0
 gh run watch "$id" --repo "$R" --exit-status --interval 3 >/dev/null 2>&1 || rc=$?
 # print the step output between the engine's ">>> " and "<<< exit" markers (log lines: job<TAB>step<TAB>timestamp text)
-gh run view "$id" --repo "$R" --log 2>/dev/null | cut -f3- | sed -E 's/^[^ ]+ //; s/\[[0-9;]*m//g'   | awk '/^>>> / {on = 1; next} /^<<< exit/ {on = 0} on' || true
+gh run view "$id" --repo "$R" --log 2>/dev/null | cut -f3- | sed -E 's/^[^ ]+ //; s/\x1b\[[0-9;]*m//g' \
+  | awk '/^>>> / {on = 1; next} /^<<< exit/ {on = 0} on' || true
 echo "remote $* → $([ $rc = 0 ] && echo OK || echo "FAILED ($rc)") · dispatch→done $(( $(date +%s) - t0 ))s · run $id"
 exit "$rc"
