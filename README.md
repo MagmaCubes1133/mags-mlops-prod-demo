@@ -101,6 +101,7 @@ jl ssh <machine_id>
 
 - Pause when idle: `jl pause <id> --yes`. The disk is kept, and it is billed while paused.
 - `jl resume <id> --gpu H200` moves the same disk to a bigger GPU in the same region. Every resume gives a new machine id.
+- The public IP changes on resume unless you attach a [Reserved IP](https://docs.jarvislabs.ai/reserved-ip/) (dashboard only: reserve it, then pick it in the resume form; from then on every resume keeps it). The workflows don't need one: they look the VM up on every run.
 - An L4 VM cost ₹41.31/h (≈ $0.49/h) in Nov 2026.
 </details>
 
