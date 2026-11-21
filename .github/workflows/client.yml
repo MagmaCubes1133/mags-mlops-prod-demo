@@ -1,7 +1,8 @@
 # Run ONE client-side demo script on a GitHub-hosted runner against the VM's PUBLIC endpoint (Caddy :80):
 # a clean, identical machine every time, outside the VM, so nothing depends on the presenter's laptop.
 # Metrics + LoRA admin go through an SSH tunnel to the VM's loopback-only :9090 (never public).
-# Separate concurrency group from lab.yml/demo-gpu.yml: lab5 lora-swap and lab6 drain must run WHILE this runs.
+# No concurrency group: lab5 lora-swap / lab6 drain (lab.yml) must run WHILE this runs, and GitHub keeps only one
+# pending run per group (a second click would silently cancel the first). Each run has its own runner.
 # Public repo: IP/ids masked (.github/jl.sh), output IP-redacted, inputs only via env (never ${{ }} in run:).
 name: client
 run-name: "client ${{ inputs.script }} ${{ inputs.label }}"
@@ -30,10 +31,6 @@ on:
         description: "lora-rollout: seconds of traffic"
         type: string
         default: "180"
-
-concurrency:
-  group: mags-mlops-prod-demo-client
-  cancel-in-progress: false
 
 permissions:
   contents: read
