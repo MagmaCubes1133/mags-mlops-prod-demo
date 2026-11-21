@@ -16,7 +16,13 @@ vm_find() {
       | while read -r v; do echo "::add-mask::$v"; done
   fi
   VM_IP=$(jq -r '.public_ip // empty' <<<"$row")   # masked above; lab.yml client-* steps use it as the public endpoint
-  { echo "VM_ID=$VM_ID"; echo "VM_GPU=$VM_GPU"; echo "VM_STATUS=$VM_STATUS"; echo "VM_IP=$VM_IP"; } >>"${GITHUB_ENV:-/dev/null}"
+  VM_HOST=""
+  if [ -n "$VM_IP" ]; then   # HTTPS hostname: sslip.io resolves <a-b-c-d>.sslip.io to a.b.c.d (contains the IP: mask it)
+    VM_HOST="${VM_IP//./-}.sslip.io"
+    echo "::add-mask::${VM_IP//./-}"
+    echo "::add-mask::$VM_HOST"
+  fi
+  { echo "VM_ID=$VM_ID"; echo "VM_GPU=$VM_GPU"; echo "VM_STATUS=$VM_STATUS"; echo "VM_IP=$VM_IP"; echo "VM_HOST=$VM_HOST"; } >>"${GITHUB_ENV:-/dev/null}"
   echo "VM: ${VM_ID:+found} ${VM_ID:-none} gpu=${VM_GPU:-?} status=${VM_STATUS:-?}"
 }
 

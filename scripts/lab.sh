@@ -57,7 +57,7 @@ PUB=http://localhost:${PUBLIC_PORT:-80}
 mkdir -p "$OUT"
 
 # --- helpers ---------------------------------------------------------------------------------
-redact() { sed -E 's/\b([0-9]{1,3}\.){3}[0-9]{1,3}\b/<ip>/g'; }
+redact() { sed -E 's/\b[0-9]{1,3}(-[0-9]{1,3}){3}\.sslip\.io\b/<vm-host>/g; s/\b([0-9]{1,3}\.){3}[0-9]{1,3}\b/<ip>/g'; }
 auth() { printf 'Authorization: Bearer %s' "$GATEWAY_KEY"; }       # fed to curl via -H @<(auth): not in argv
 code() { curl -s -o /dev/null -w '%{http_code}' "$@" || true; }
 metrics() { curl -s --max-time 5 "$OPS/metrics" || true; }

@@ -86,7 +86,7 @@ jobs:
           if [ "${DELAY:-0}" -gt 0 ]; then echo "waiting ${DELAY}s before $STEP_IN"; sleep "$DELAY"; fi
           t=$(date +%s)
           report_header "$where" "$show"
-          vm_exec "$cmd" 2>&1 | grep -v '^Executing on' | sed -uE 's/\b([0-9]{1,3}\.){3}[0-9]{1,3}\b/<ip>/g' | tee out.txt
+          vm_exec "$cmd" 2>&1 | grep -v '^Executing on' | sed -uE 's/\b[0-9]{1,3}(-[0-9]{1,3}){3}\.sslip\.io\b/<vm-host>/g; s/\b([0-9]{1,3}\.){3}[0-9]{1,3}\b/<ip>/g' | tee out.txt
           rc=${PIPESTATUS[0]}
           echo "<<< exit $rc"
           report_summary "$rc" "$(( $(date +%s) - t ))" out.txt "$where" "$show"
@@ -144,14 +144,21 @@ jobs:
             -L 9090:127.0.0.1:9090 "ubuntu@$VM_IP" > ssh.log 2>&1 \
             || { sed -E 's/\b([0-9]{1,3}\.){3}[0-9]{1,3}\b/<ip>/g' ssh.log; echo "::error::ssh tunnel failed"; exit 1; }
           curl -sf -o /dev/null http://127.0.0.1:9090/caddy-health || { echo "::error::metrics tunnel not up"; exit 1; }
-          code=$(curl -s -o /dev/null -w '%{http_code}' "http://$VM_IP/health")
-          echo "public endpoint /health: $code · GPU $VM_GPU · runner $(uname -m) $(. /etc/os-release && echo "$PRETTY_NAME")"
+          # HTTPS (demo-gpu https=true: Caddy + Let's Encrypt on <ip-with-dashes>.sslip.io), else plain HTTP on the IP
+          if [ "$(curl -s -o /dev/null -w '%{http_code}' "https://$VM_HOST/health")" = 200 ]; then
+            base="https://$VM_HOST"; shown="https://<vm-host>"
+          else
+            base="http://$VM_IP"; shown="http://<vm-ip>"
+          fi
+          code=$(curl -s -o /dev/null -w '%{http_code}' "$base/health")
+          echo "public endpoint $shown/health: $code · GPU $VM_GPU · runner $(uname -m) $(. /etc/os-release && echo "$PRETTY_NAME")"
           [ "$code" = 200 ] || { echo "::error::public /health is $code"; exit 1; }
+          { echo "BASE_URL=$base"; echo "ENDPOINT_SHOWN=$shown"; } >> "$GITHUB_ENV"
       - name: Run step
         env:
           GATEWAY_KEY: ${{ secrets.GATEWAY_KEY }}
         run: |
-          export BASE_URL="http://$VM_IP"
+          export BASE_URL   # set by the previous step: https://<vm-host> or http://<vm-ip>
           # shellcheck disable=SC2329  # invoked via cmd=(stream)
           stream() {
             curl -sN "$BASE_URL/v1/chat/completions" -H "Authorization: Bearer $GATEWAY_KEY" -H 'Content-Type: application/json' \
@@ -179,14 +186,14 @@ jobs:
           if [ "${cmd[0]}" = stream ]; then
             show="curl -sN \$BASE_URL/v1/chat/completions -H 'Authorization: Bearer \$GATEWAY_KEY' -d '{\"model\":\"qwen2.5-7b\",\"stream\":true,\"max_tokens\":900,…}'"
           else
-            show="BASE_URL=http://<vm-ip> GATEWAY_KEY=… ${cmd[*]}"
+            show="BASE_URL=$ENDPOINT_SHOWN GATEWAY_KEY=… ${cmd[*]}"
           fi
-          where="GitHub-hosted runner → public endpoint http://<vm-ip> (GPU ${VM_GPU}); metrics via SSH tunnel"
+          where="GitHub-hosted runner → public endpoint $ENDPOINT_SHOWN (GPU ${VM_GPU}); metrics via SSH tunnel"
           set +e
           if [ "${DELAY:-0}" -gt 0 ]; then echo "waiting ${DELAY}s before $STEP_IN"; sleep "$DELAY"; fi
           t=$(date +%s)
           report_header "$where" "$show"
-          "${cmd[@]}" 2>&1 | sed -uE 's/\b([0-9]{1,3}\.){3}[0-9]{1,3}\b/<ip>/g' | tee out.txt
+          "${cmd[@]}" 2>&1 | sed -uE 's/\b[0-9]{1,3}(-[0-9]{1,3}){3}\.sslip\.io\b/<vm-host>/g; s/\b([0-9]{1,3}\.){3}[0-9]{1,3}\b/<ip>/g' | tee out.txt
           rc=${PIPESTATUS[0]}
           echo "<<< exit $rc"
           report_summary "$rc" "$(( $(date +%s) - t ))" out.txt "$where" "$show"
