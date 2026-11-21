@@ -105,6 +105,7 @@ Verified facts and on-GPU results: `docs/reference/phase1-verified-facts.md`, `d
 | `.github/workflows/demo-gpu.yml` | Jarvislabs provision / deploy / verify / swap-gpu / pause / resume / destroy |
 | `.github/workflows/lab.yml` | one `lab.sh` step on the VM over SSH (inputs `lab`, `step`, `arg`, `sync`; a failed sync fails the run) |
 | `docs/demo-day.md` | presenter run sheet |
+| `docs/slides/` | final deck (.pptx) + 15 diagrams, diagram→slide map |
 | `results/` | measured benchmark CSVs (L4) |
 
 ## Instructor: GitHub Actions fallback

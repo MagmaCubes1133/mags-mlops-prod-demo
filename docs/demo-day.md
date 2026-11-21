@@ -33,6 +33,7 @@ scripts/tunnel.sh                            # 2nd terminal, keep open: localhos
 
 | Segment | VM step (SSH · gh) | Laptop | Expect | Fallback `P` |
 |---|---|---|---|---|
+| **S3-01a** About me (60–90 s) | — | — | — | — |
 | **Lab 1** first boot (3.3) | `L lab1 up` · `remote.sh lab1 up` (94 s); then `lab1 bootlog`, `lab1 nvidia-smi` | `python3 scripts/vram_math.py` | HEALTHY 40–60 s warm; weights **14.29 GiB**; KV **70,656–78,848 tok**, **8.6–9.6×** at 8k; L4 23034 MiB, driver 580.196.07; calc 7,615,616,512 params, 57,344 B/token | `baseline` |
 | **Lab 2** gateway (3.4) | `lab2 edge-up` → `lab2 caddy-validate` → `lab2 caddy-reload` → `lab2 show-config` (each ≈ 40 s via gh) | `bash scripts/smoke_test.sh`; `curl -N` a stream; `uv run scripts/demo_structured_output.py` | 401/401/403×4/413/400 all PASS; reload → `/health 200`; Caddy adds **0 ms** TTFT (123.4 vs 123.4); `guided_json` → 200 with prose (ignored) | `baseline` |
 | **Lab 3** observability (3.5) | `lab3 metrics kv_cache` · `lab3 prefix-cache` | `uv run scripts/demo_prefix_cache.py`, then `--repeat 130` (S3-20b) | 2.4k history: turn 1 **709 → 127 ms**, hit ≈ 82%; ~8k history: **2,247 → 133 ms**, hit 83% | `baseline` |
@@ -52,3 +53,9 @@ scripts/tunnel.sh                            # 2nd terminal, keep open: localhos
 Static numbers for slides only (no live switch): FP8 weights 8.17 GiB / 182,272 tok; AWQ + fp8 KV 448,512 tok, **54.75×**; fp8 KV → FLASHINFER backend.
 
 **Fallback caveat (Lab 4):** `emulate_l4=true` pins *every* profile to the BF16 L4 pool (≈ 70k tokens), AWQ included, so AWQ would preempt too. Without emulation, an H200 never preempts. Either way the BF16-vs-AWQ contrast is gone. On a fallback GPU, show the recorded L4 rows (`results/bench-{bf16,awq}-pressure.csv`) and say why.
+
+## Likely questions
+
+- **Does continuous batching still happen with chunked prefill?** Yes. vLLM V1 gives each step a 2,048-token budget on the L4 (`max_num_batched_tokens`). Requests already writing go first, 1 token each; new prompts fill the rest in chunks. Cost: a new person's first word is a bit later; nobody else freezes. (S3-09a)
+- **How don't users' requests get mixed up?** Tokens are packed into one batch with a map (start/end, positions, block lists, request id). Linear layers are row-independent, attention follows each request's own block list, and each token is routed back by request id. Prefix blocks are shared only when the content is identical. Caveats: per-tenant `cache_salt` against prefix-cache timing probes; temperature 0 isn't bit-identical under load unless `VLLM_BATCH_INVARIANT=1` (slower; drops AWQ off Marlin). (S3-09b)
+- **What's a sequence / what does `--max-num-seqs` limit?** One request's running token stream (prompt + words so far); n = 1 → one sequence. `--max-num-seqs` caps sequences per step (default 256); on the L4 the KV pool binds first: ~9 long chats on BF16, ~29 on AWQ. (S4-05)
