@@ -164,14 +164,22 @@ Run `export MSYS_NO_PATHCONV=1 PYTHONUTF8=1` first. Without it, Git Bash rewrite
 
 Every step, server side and client side, is a button in the **Actions** tab. Each client run starts on a fresh GitHub-hosted runner and calls the public endpoint from outside, so results never depend on a presenter's laptop.
 
-| Workflow | What it runs | Typical time |
-|---|---|---|
-| `demo-gpu` | provision / resume / deploy / verify / swap GPU / pause / destroy | resume → verified ≈ 6 min |
-| `lab` | one VM-side step: `scripts/lab.sh <lab> <step> [arg]` | 35–130 s |
-| `client` | one client script on the runner: `smoke`, `stream`, `structured-output`, `prefix-cache`, `prefix-cache-8k`, `bench-sweep`, `bench-pressure`, `lora-rollout`, `lora-compare` | ≈ 30 s setup + the script |
+| Workflow | Dropdown |
+|---|---|
+| **demo-gpu** | provision / resume / deploy / verify / swap GPU / pause / destroy (resume → verified ≈ 6 min) |
+| **Lab 0 · Common** | `status`, `logs vllm`, `logs caddy`, `restart`, `capture`, `down`, `client-smoke` |
+| **Lab 1 · First boot** | `up`, `bootlog`, `nvidia-smi` |
+| **Lab 2 · Gateway** | `edge-up`, `caddy-validate`, `caddy-reload`, `show-config`, `client-smoke`, `client-stream`, `client-structured-output` |
+| **Lab 3 · Observability** | `metrics`, `metrics kv_cache`, `prefix-cache`, `client-prefix-cache`, `client-prefix-cache-8k` |
+| **Lab 3→4 · Break** | `awq-warm` |
+| **Lab 4 · Quantization under load** | `client-bench-pressure`, `switch baseline\|awq\|fp8\|fp8-kv`, `vram-math`, `metrics-watch start\|stop`, `client-bench-sweep` (+ `label`) |
+| **Lab 5 · Multi-LoRA rollout** | `lora-up`, `lora-status`, `make-v2`, `client-lora-rollout` (+ `duration`), `lora-swap v2`, `lora-swap v1`, `client-lora-compare` |
+| **Lab 6 · Graceful drain** | `client-stream`, `drain`, `restart` |
+
+Steps without a prefix run `scripts/lab.sh <lab> <step>` on the VM (35–130 s); `client-…` steps run on a fresh GitHub runner (≈ 30 s setup + the script). All of them share one engine, `.github/workflows/lab.yml`. From a terminal, `scripts/remote.sh <lab> <step> [arg]` clicks the same buttons.
 
 - **Nothing to update after a resume.** No secret stores the endpoint: every run looks the VM up by name through the Jarvislabs API and reads its current IP. The IP and machine id are masked in the public logs.
-- **Live interplay works.** Start `client lora-rollout`, then click `lab lab5 lora-swap v2` and later `v1` while traffic flows (verified: 800 requests, 0 non-2xx). Start `client stream`, then click `lab lab6 drain`: the answer still completes.
+- **Live interplay works.** Start **Lab 5** → `client-lora-rollout`, then click `lora-swap v2` and later `lora-swap v1` while traffic flows (verified: 800 requests, 0 non-2xx). Start **Lab 6** → `client-stream`, then click `drain`: the answer still completes.
 - **Metrics** reach the runner through an SSH tunnel to the VM's loopback-only port 9090; they are never public.
 - **TTFT from a runner includes the round trip** from GitHub's datacentre to the VM (≈ 200 ms to an India VM). Inter-token latency, throughput, KV usage and preemptions match a local run.
 
@@ -197,7 +205,7 @@ Every step, server side and client side, is a button in the **Actions** tab. Eac
 │   ├── benchmark_concurrency.py, demo_prefix_cache.py, demo_multilora_rollout.py, demo_structured_output.py
 │   ├── vram_math.py, make_regressed_adapter.py
 │   └── remote.sh, tunnel.sh  laptop helpers: run a step via GitHub Actions; SSH tunnel for metrics
-├── .github/workflows/        demo-gpu.yml (provision / deploy / swap GPU / pause) · lab.yml (one lab step over SSH)
+├── .github/workflows/        demo-gpu.yml (VM lifecycle) · common.yml, lab1-6.yml, break.yml (one button per lab) · lab.yml (shared engine)
 ├── results/                  benchmark CSVs measured on the L4
 └── docs/
     ├── benchmarks.md         every measured number, with method
@@ -219,7 +227,7 @@ Every step, server side and client side, is a button in the **Actions** tab. Eac
 - **L4 unavailable?** Re-run with `gpu=auto` (walks `L4,H100,H200,RTX-PRO6000`, VM offerings only) or `action=swap-gpu gpu=H200` (same disk, same region). A100/A30 are container-only on Jarvislabs (no Docker), so they are not in the chain.
 - **Balance rule:** Jarvislabs starts an instance only if the `jl status` balance covers 1 h of its list price (H200: ₹434.97). A running VM is not reserved.
 - `emulate_l4=true` pins the KV pool to the L4 size, so KV-capacity demos match the slides. Latency is still faster: say so.
-- **Lab steps without SSH:** `scripts/remote.sh <lab> <step> [arg]` dispatches `lab.yml` and streams the output (35–130 s per step). A failed VM sync fails the run.
+- **Lab steps without SSH:** `scripts/remote.sh <lab> <step> [arg]` dispatches that lab's workflow and streams the output (35–130 s per step). A failed VM sync fails the run.
 - Logs are public: the workflows mask every id and IP.
 - **The API key comes from the `GATEWAY_KEY` repo secret.** Every `provision`, `deploy`, `resume` and `swap-gpu` run writes it into the VM's `.env`. To change it, update the secret *and* your local `.env` to the same value, then run `action=deploy` (or the next `resume`).
 - **The endpoint is never in the logs.** Get it on your laptop with `scripts/tunnel.sh ip` (uses your Jarvislabs key). It changes on every resume.

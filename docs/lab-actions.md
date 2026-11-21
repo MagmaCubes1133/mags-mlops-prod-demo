@@ -2,7 +2,7 @@
 
 One entrypoint: `scripts/lab.sh <lab> <step> [arg]` on the VM.
 - **SSH:** `ssh -i ~/.ssh/mags_jl ubuntu@<vm> 'bash mags-mlops-prod-demo/scripts/lab.sh <lab> <step> [arg]'`
-- **gh:** `scripts/remote.sh <lab> <step> [arg]` (= `gh workflow run lab.yml -f lab=… -f step=… -f arg=…` + `gh run watch`)
+- **gh:** `scripts/remote.sh <lab> <step> [arg]` (= `gh workflow run <lab>.yml -f step="<step> [arg]"` + `gh run watch`; the same as clicking the lab's button)
 
 Latency = dispatch → run done via `scripts/remote.sh` on L4, 2026-11-19 (sync=true unless noted). **Live** ≲ 60 s; **backstage** = start before the segment.
 
@@ -32,17 +32,17 @@ Latency = dispatch → run done via `scripts/remote.sh` on L4, 2026-11-19 (sync=
 | lab5 lora-status | /v1/models + lora_requests_info | 44 s | live |
 | lab6 drain | graceful stop of vLLM (stopped in 26 s) | 64 s | live |
 
-## Client scripts via the `client` workflow
+## Client steps (`client-…` in each lab's dropdown)
 
 A GitHub-hosted runner calls the public endpoint; metrics via an SSH tunnel. Dispatch → done, L4 with the `lora` profile, 2026-11-21. About 30 s of each run is runner setup.
 
-| `script` | gh latency | Result |
+| step | gh latency | Result |
 |---|---|---|
-| smoke | 32 s | all PASS incl. metrics |
-| stream | 64 s | `[DONE], finish_reason=stop`, 850 chunks |
-| structured-output | 39 s | `RESULT: as documented` |
-| prefix-cache-8k | 44 s | hit 82.7% |
-| lora-compare | 51 s | v1 vs v2 answers |
-| lora-rollout (duration 150) | 180 s | 800 requests, 0 non-2xx, with lab5 lora-swap v2 → v1 clicked meanwhile |
-| bench-sweep | 4 min 17 s | ITL p50 56.6 ms, 482 tok/s at 32 |
-| stream + lab6 drain | 70 s / 38 s | drain waited for 1 in-flight request; stream completed |
+| client-smoke | 32 s | all PASS incl. metrics |
+| client-stream | 64 s | `[DONE], finish_reason=stop`, 850 chunks |
+| client-structured-output | 39 s | `RESULT: as documented` |
+| client-prefix-cache-8k | 44 s | hit 82.7% |
+| client-lora-compare | 51 s | v1 vs v2 answers |
+| client-lora-rollout (duration 150) | 180 s | 800 requests, 0 non-2xx, with lab5 lora-swap v2 → v1 clicked meanwhile |
+| client-bench-sweep | 4 min 17 s | ITL p50 56.6 ms, 482 tok/s at 32 |
+| client-stream + lab6 drain | 70 s / 38 s | drain waited for 1 in-flight request; stream completed |
