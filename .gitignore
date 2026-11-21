@@ -90,3 +90,7 @@ adapters/*
 id_*
 # non-secret per-GPU profiles (would otherwise match *.env)
 !profiles/*.env
+
+# --- Local only ---
+CLAUDE.md
+.archive/

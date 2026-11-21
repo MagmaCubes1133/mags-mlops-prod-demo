@@ -18,7 +18,7 @@ Latency = dispatch → run done via `scripts/remote.sh` on L4, 2026-11-19 (sync=
 | lab1 nvidia-smi | nvidia-smi + query | 39 s | live |
 | lab2 show-config | Caddyfile + compose config, secrets redacted | 41 s | live |
 | lab2 caddy-validate | validate Caddyfile in caddy image | 42 s | live |
-| lab2 caddy-reload | zero-downtime reload via admin API (container loopback) | 42 s (after fix 39172e1) | live |
+| lab2 caddy-reload | zero-downtime reload via admin API (container loopback) | 42 s | live |
 | lab2 edge-up | start Caddy, wait healthy | 40 s | live |
 | lab3 metrics [filter] | key vllm:* lines from :9090 | 43 s / 41 s | live |
 | lab3 prefix-cache | hit/query counters + rate | 53 s | live |

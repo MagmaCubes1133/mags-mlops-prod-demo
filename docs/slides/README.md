@@ -26,5 +26,5 @@ Presenters: see [`../demo-day.md`](../demo-day.md) for the run sheet.
 
 ## Provenance
 
-Numbers trace to [`docs/slide-numbers.md`](../slide-numbers.md) at `5016f02` and [`results/*.csv`](../../results/).
+Numbers trace to [`docs/benchmarks.md`](../benchmarks.md) (`docs/slide-numbers.md` at `5016f02`) and [`results/*.csv`](../../results/).
 Not measured: S3-20b's CPU/NVMe/remote rows (labelled estimates on the slide) and d14's step widths (labelled illustrative).

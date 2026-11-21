@@ -1,6 +1,6 @@
 # Demo-day run sheet — Thu 3 Dec 2026, 2:00–5:15 PM IST
 
-One page for presenters. Numbers come from `docs/slide-numbers.md` (L4, vLLM v0.34.0); step timings from `docs/lab-actions.md`.
+One page for presenters. Numbers come from [`benchmarks.md`](benchmarks.md) (L4, vLLM v0.34.0); step timings from [`lab-actions.md`](lab-actions.md).
 Every VM step has two forms: **SSH** `L <lab> <step> [arg]` (fastest) or **gh** `scripts/remote.sh <lab> <step> [arg]` (no SSH needed, 35–130 s).
 
 ## Laptop prerequisites (Windows Git Bash shown; macOS/Linux skip the first line)
