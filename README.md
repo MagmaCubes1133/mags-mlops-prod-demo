@@ -10,6 +10,7 @@ Docker + NVIDIA Container Toolkit + vLLM + Caddy, with every command reproducibl
 [![Model](https://img.shields.io/badge/model-Qwen2.5--7B--Instruct-6E56CF)](https://huggingface.co/Qwen/Qwen2.5-7B-Instruct)
 [![GPU](https://img.shields.io/badge/GPU-NVIDIA%20L4%2024%20GB-76B900?logo=nvidia&logoColor=white)](docs/benchmarks.md)
 [![Images](https://img.shields.io/badge/images-pinned%20by%20sha256-2B3137?logo=docker&logoColor=white)](docker-compose.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-yellow)](LICENSE)
 
 [Quickstart](#quickstart) · [Labs](#labs) · [Benchmarks](docs/benchmarks.md) · [Slides](docs/slides/) · [Run sheet](docs/demo-day.md) · [Troubleshooting](#troubleshooting)
 
@@ -224,3 +225,7 @@ GitHub: [@MagmaCubes1133](https://github.com/MagmaCubes1133)
 ## Acknowledgements
 
 Built on [vLLM](https://github.com/vllm-project/vllm), [Caddy](https://caddyserver.com), [Qwen2.5-7B-Instruct](https://huggingface.co/Qwen/Qwen2.5-7B-Instruct) and its [AWQ build](https://huggingface.co/Qwen/Qwen2.5-7B-Instruct-AWQ), and the LoRA adapters [vindows/qwen2.5-7b-text-to-sql](https://huggingface.co/vindows/qwen2.5-7b-text-to-sql) and [TIGER-Lab/StopLoss-Qwen2.5-7B-Instruct](https://huggingface.co/TIGER-Lab/StopLoss-Qwen2.5-7B-Instruct). Thanks to ISTE and K. J. Somaiya School of Engineering for hosting the STTP. GPU time on [Jarvislabs](https://jarvislabs.ai).
+
+## License
+
+[MIT](LICENSE) © 2026 Saumya Saraswat. Model weights and adapters keep their own licences on Hugging Face.
