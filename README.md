@@ -119,6 +119,28 @@ Every **VM-side** step has one entrypoint: `bash scripts/lab.sh <lab> <step> [ar
 
 Always available: `common status` (prints the active profile) · `common logs vllm 100` · `common restart` · `common down` · `common capture`.
 
+### Endpoint and API key
+
+- **API key.** Caddy accepts exactly one bearer token: `GATEWAY_KEY` from the host's `.env`. You choose it. The Quickstart generates a random one; any value made of `A–Z a–z 0–9 _ -` works (use ≥ 32 characters). Change it in `.env`, then `bash scripts/up.sh <profile>` to restart Caddy with it.
+- **Endpoint.** `http://<host-ip>` on port 80; the API lives under `/v1`. On the GPU host itself, use `http://localhost`.
+
+### Running the client scripts from your laptop
+
+Every laptop-side script reads `BASE_URL` (default `http://localhost`) and `GATEWAY_KEY` from the environment.
+
+```bash
+# in your local clone; .env holds the same GATEWAY_KEY as the GPU host
+set -a; . ./.env; set +a                         # exports GATEWAY_KEY
+export BASE_URL=http://<host-ip>                 # Jarvislabs VM: export BASE_URL=http://$(scripts/tunnel.sh ip)
+ssh -N -L 9090:127.0.0.1:9090 <you>@<host-ip> &  # optional: metrics + LoRA admin (Jarvislabs: scripts/tunnel.sh)
+
+bash scripts/smoke_test.sh                       # 401/403/413/400, /health, a stream, every model; metrics checks need the tunnel
+uv run scripts/demo_prefix_cache.py
+uv run scripts/benchmark_concurrency.py --label bf16
+```
+
+Without the tunnel, the scripts skip their metrics parts and say so.
+
 <details>
 <summary><b>LoRA request example</b></summary>
 
@@ -184,6 +206,10 @@ Run `export MSYS_NO_PATHCONV=1 PYTHONUTF8=1` first. Without it, Git Bash rewrite
 - `emulate_l4=true` pins the KV pool to the L4 size, so KV-capacity demos match the slides. Latency is still faster: say so.
 - **Lab steps without SSH:** `scripts/remote.sh <lab> <step> [arg]` dispatches `lab.yml` and streams the output (35–130 s per step). A failed VM sync fails the run.
 - Logs are public: the workflows mask every id and IP.
+- **The API key comes from the `GATEWAY_KEY` repo secret.** Every `provision`, `deploy`, `resume` and `swap-gpu` run writes it into the VM's `.env`. To change it, update the secret *and* your local `.env` to the same value, then run `action=deploy` (or the next `resume`).
+- **The endpoint is never in the logs.** Get it on your laptop with `scripts/tunnel.sh ip` (uses your Jarvislabs key). It changes on every resume.
+
+**What runs entirely on Actions:** provisioning, resume, pause, GPU swap, deploy, the smoke test (on the VM, in `verify`), and every VM-side lab step. **What needs a laptop:** the client-side scripts (load tests, prefix cache, LoRA rollout traffic, structured output, `curl` streams), since they are the demo of a client calling the endpoint.
 </details>
 
 ## Troubleshooting
