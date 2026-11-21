@@ -137,7 +137,7 @@ async def compare(args, client: httpx.AsyncClient, ops: httpx.AsyncClient) -> in
         print(f"\n=== {path} (as {name})")
         for db, q in SQL_CASES:
             r = await complete(client, name, SQL_PROMPT.format(db=db, q=q), 96)
-            print(f"- {q}\n  {r.json()['choices'][0]['text'].strip()!r}")
+            print(f"\n- {q}\n  {r.json()['choices'][0]['text'].strip()!r}")
         await ops.post("/v1/unload_lora_adapter", json={"lora_name": name})
     return 0
 

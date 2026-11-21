@@ -105,7 +105,7 @@ def main() -> None:
                 ms, answer, n = ttft(c, messages)
                 messages.append({"role": "assistant", "content": answer})
                 results.append((p, i, ms))
-                print(f"pass {p} turn {i}: {n} prompt tokens, TTFT {ms:7.1f} ms\n  user: {q}\n  assistant: {answer[:160]!r}")
+                print(f"\npass {p} turn {i}: {n} prompt tokens, TTFT {ms:7.1f} ms\n  user: {q}\n  assistant: {answer[:160]!r}")
         after = counters(ops)
 
     print("\n| turn | TTFT pass 1 (cold) ms | TTFT pass 2 (warm) ms |\n|---|---|---|")
