@@ -87,8 +87,12 @@ jobs:
           stream() {
             curl -sN "$BASE_URL/v1/chat/completions" -H "Authorization: Bearer $GATEWAY_KEY" -H 'Content-Type: application/json' \
               -d '{"model":"qwen2.5-7b","stream":true,"max_tokens":900,"messages":[{"role":"user","content":"Explain, step by step and in detail, how a GPU serves many chat users at once."}]}' \
-              | sed -un 's/^data: //p' | grep --line-buffered -v '^\[DONE\]' | jq --unbuffered -rj '.choices[0].delta.content // empty'
-            echo; echo "stream complete"
+              | tee raw.sse | sed -un 's/^data: //p' | grep --line-buffered -v '^\[DONE\]' | jq --unbuffered -rj '.choices[0].delta.content // empty'
+            echo
+            # a drained server must still finish the answer: [DONE] + finish_reason=stop, else red
+            reason=$(sed -n 's/^data: //p' raw.sse | grep -v '^\[DONE\]' | jq -r '.choices[0].finish_reason // empty' | tail -1)
+            grep -q '^data: \[DONE\]' raw.sse || { echo "STREAM CUT OFF (no [DONE])"; return 1; }
+            echo "stream complete: [DONE], finish_reason=$reason, $(grep -c '^data: {' raw.sse) chunks"
           }
           case $SCRIPT in
             smoke)             cmd=(bash scripts/smoke_test.sh) ;;
