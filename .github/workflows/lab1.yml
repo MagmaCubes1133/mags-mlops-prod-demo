@@ -1,0 +1,29 @@
+# Button for one lab: pick a step, click Run. Engine: lab.yml (VM steps via scripts/lab.sh; client-* on a GitHub runner).
+name: "Lab 1 · First boot"
+run-name: "lab1 ${{ inputs.step }}"
+
+on:
+  workflow_dispatch:
+    inputs:
+      step:
+        type: choice
+        options:
+          - "up"
+          - "bootlog"
+          - "nvidia-smi"
+      sync:
+        description: VM steps - sync the VM checkout to this commit first (off = ~10 s faster)
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+jobs:
+  run:
+    uses: ./.github/workflows/lab.yml
+    with:
+      lab: lab1
+      step: ${{ inputs.step }}
+      sync: ${{ inputs.sync }}
+    secrets: inherit

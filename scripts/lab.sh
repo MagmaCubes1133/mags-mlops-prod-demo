@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # On-VM lab entrypoint: the single source of truth for every VM-side workshop step.
-#   GitHub Actions:  scripts/remote.sh <lab> <step> [arg]     (→ .github/workflows/lab.yml → SSH → this script)
+#   GitHub Actions:  the <lab> button (.github/workflows/<lab>.yml → engine lab.yml → SSH → this script), or scripts/remote.sh <lab> <step> [arg]
 #   Live over SSH:   ssh ubuntu@<vm> 'bash mags-mlops-prod-demo/scripts/lab.sh <lab> <step> [arg]'
 # Usage: scripts/lab.sh help
 # Never prints .env or GATEWAY_KEY. Every argument is checked against a per-step allowlist.

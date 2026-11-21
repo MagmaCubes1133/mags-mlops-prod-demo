@@ -110,7 +110,7 @@ async def rollout(args, client: httpx.AsyncClient, ops: httpx.AsyncClient | None
         await answer("v1 again")
         await asyncio.sleep(phase)
     else:  # traffic only: the swap comes from `lab.sh lab5 lora-swap` on the VM
-        print(f"traffic for {args.duration:.0f}s — swap now: lab workflow lab5 lora-swap v2, then v1 (or scripts/remote.sh lab5 lora-swap v2)")
+        print(f"traffic for {args.duration:.0f}s — swap now: Actions → Lab 5 → lora-swap v2, then lora-swap v1 (or scripts/remote.sh lab5 lora-swap v2)")
         while time.perf_counter() - t0 < args.duration:
             await answer("sql-prod")
             await asyncio.sleep(args.sample_every)

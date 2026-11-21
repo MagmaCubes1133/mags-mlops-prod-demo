@@ -1,19 +1,24 @@
 #!/usr/bin/env bash
-# Laptop: run one VM-side lab step through GitHub Actions (.github/workflows/lab.yml), stream its
-# output, and report dispatch→done wall-clock time.
-# Usage: scripts/remote.sh <lab> <step> [arg]        SYNC=false skips the VM git sync (faster)
-# Needs: gh (authenticated). Same steps over SSH: bash scripts/lab.sh <lab> <step> [arg] on the VM.
+# Laptop: run one lab step through GitHub Actions (the <lab>.yml button; engine lab.yml), stream its
+# output, and report dispatch→done wall-clock time. Step names match the Actions dropdowns.
+# Usage: scripts/remote.sh <lab> <step> [arg]     e.g. lab4 switch awq · lab2 client-smoke · common logs vllm
+#        SYNC=false skips the VM git sync (faster). LABEL=… (lab4) / DURATION=… (lab5) for client steps.
+# Needs: gh (authenticated). VM steps over SSH instead: bash scripts/lab.sh <lab> <step> [arg] on the VM.
 set -euo pipefail
 [ $# -ge 2 ] || { echo "usage: scripts/remote.sh <lab> <step> [arg]"; exit 2; }
 R=${REPO:-MagmaCubes1133/mags-mlops-prod-demo}
+W="$1.yml"
 t0=$(date +%s)
 since=$(date -u -d "@$((t0 - 5))" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u +%Y-%m-%dT%H:%M:%SZ)
 
-gh workflow run lab.yml --repo "$R" --ref "${REF:-main}" \
-  -f lab="$1" -f step="$2" -f arg="${3:-}" -f sync="${SYNC:-true}" >/dev/null
+extra=()
+[ "$1" = lab4 ] && extra=(-f label="${LABEL:-run}")
+[ "$1" = lab5 ] && extra=(-f duration="${DURATION:-180}")
+gh workflow run "$W" --repo "$R" --ref "${REF:-main}" \
+  -f step="$2${3:+ $3}" -f sync="${SYNC:-true}" "${extra[@]}" >/dev/null
 id=""
 for _ in $(seq 1 30); do
-  id=$(gh run list --repo "$R" --workflow lab.yml --event workflow_dispatch --limit 5 --json databaseId,createdAt \
+  id=$(gh run list --repo "$R" --workflow "$W" --event workflow_dispatch --limit 5 --json databaseId,createdAt \
     --jq "[.[] | select(.createdAt >= \"$since\")] | last | .databaseId // empty")
   [ -n "$id" ] && break
   sleep 2

@@ -1,81 +1,53 @@
-# Run ONE VM-side lab step (scripts/lab.sh) on the Jarvislabs VM over SSH.
-# Laptop: scripts/remote.sh <lab> <step> [arg]. Same commands work directly over SSH as a live fallback.
+# Shared engine for every lab button (common.yml, lab1.yml … lab6.yml, break.yml). Not clicked directly.
+#   step "<name> [arg]"      → VM side: scripts/lab.sh <lab> <name> [arg] on the VM over SSH (jl exec)
+#   step "client-<script>"   → a GitHub-hosted runner calls the VM's PUBLIC endpoint (Caddy :80);
+#                              metrics + LoRA admin through an SSH tunnel to the VM's loopback-only :9090
+# The VM is looked up by name on every run (IP/id change on each resume; nothing to update).
 # Public repo: ids/IPs masked (.github/jl.sh), output IP-redacted, inputs only via env (never ${{ }} in run:).
-name: lab
-run-name: "lab ${{ inputs.lab }} ${{ inputs.step }} ${{ inputs.arg }}"
+name: lab (engine)
 
 on:
-  workflow_dispatch:
+  workflow_call:
     inputs:
-      lab:
-        type: choice
-        options: [common, lab1, lab2, lab3, break, lab4, lab5, lab6]
-        default: common
-      step:
-        type: choice
-        options:
-          - status
-          - logs
-          - restart
-          - down
-          - capture
-          - up
-          - bootlog
-          - nvidia-smi
-          - edge-up
-          - caddy-validate
-          - caddy-reload
-          - show-config
-          - metrics
-          - prefix-cache
-          - awq-warm
-          - switch
-          - vram-math
-          - metrics-watch
-          - lora-up
-          - make-v2
-          - lora-swap
-          - lora-status
-          - drain
-        default: status
-      arg:
-        description: "Step argument (checked against a per-step allowlist in scripts/lab.sh)"
-        type: string
-        default: ""
-      sync:
-        description: Sync the VM checkout to this commit first
-        type: boolean
-        default: true
-
-concurrency:
-  group: mags-mlops-prod-demo
-  cancel-in-progress: false
+      lab: { type: string, required: true }
+      step: { type: string, required: true }
+      sync: { type: boolean, default: true }
+      label: { type: string, default: run }
+      duration: { type: string, default: "180" }
 
 permissions:
   contents: read
 
 env:
   VM_NAME: mags-mlops-prod-demo
-  JL_API_KEY: ${{ secrets.JL_API_KEY }}
   PYTHONIOENCODING: utf-8
+  PYTHONUNBUFFERED: "1"
   COLUMNS: "200"
   REPO_DIR: /home/ubuntu/mags-mlops-prod-demo
   LAB: ${{ inputs.lab }}
-  STEP: ${{ inputs.step }}
-  ARG: ${{ inputs.arg }}
+  STEP_IN: ${{ inputs.step }}
   SYNC: ${{ inputs.sync }}
+  LABEL: ${{ inputs.label }}
+  DURATION: ${{ inputs.duration }}
 
 jobs:
-  run:
+  vm:
+    if: ${{ !startsWith(inputs.step, 'client-') }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    # Serialised with demo-gpu.yml so a step never races a deploy. Wait for green before the next VM click:
+    # GitHub keeps one *pending* run per group, so a third click while one runs and one waits replaces the waiting one.
+    concurrency:
+      group: mags-mlops-prod-demo
+      cancel-in-progress: false
     steps:
       - uses: actions/checkout@v4
         with:
           sparse-checkout: .github
       - name: Check input charset
         run: |
-          [[ $ARG =~ ^[A-Za-z0-9._:-]*( [0-9]{1,4})?$ ]] || { echo "::error::arg contains disallowed characters"; exit 1; }
+          [[ $LAB =~ ^(common|lab[1-6]|break)$ && $STEP_IN =~ ^[a-z0-9-]+( [A-Za-z0-9._:-]+)*$ ]] \
+            || { echo "::error::bad lab/step"; exit 1; }
       - name: Install jl + SSH key
         env:
           KEY: ${{ secrets.JL_SSH_PRIVATE_KEY }}
@@ -83,27 +55,34 @@ jobs:
           pipx install jarvislabs==0.2.17 > /dev/null
           install -d -m 700 ~/.ssh && printf '%s\n' "$KEY" > ~/.ssh/id_ed25519 && chmod 600 ~/.ssh/id_ed25519
       - name: Locate VM + balance
+        env:
+          JL_API_KEY: ${{ secrets.JL_API_KEY }}
         run: |
           source .github/jl.sh
           vm_find
-          [ "$VM_STATUS" = Running ] || { echo "::error::VM not running (${VM_STATUS:-missing}) — demo-gpu.yml action=resume"; exit 1; }
+          [ "$VM_STATUS" = Running ] || { echo "::error::VM not running (${VM_STATUS:-missing}) — demo-gpu action=resume"; exit 1; }
           vm_wait_ssh   # a just-resumed VM reports Running before sshd is up
           echo "Jarvislabs balance: ₹$(jl status --json | jq -r .balance.balance) · GPU ${VM_GPU}" | tee -a "$GITHUB_STEP_SUMMARY"
       - name: Sync VM checkout to this commit
-        if: env.SYNC == 'true'
+        if: inputs.sync
+        env:
+          JL_API_KEY: ${{ secrets.JL_API_KEY }}
         run: |
           source .github/jl.sh
           vm_sync
       - name: Run step
+        env:
+          JL_API_KEY: ${{ secrets.JL_API_KEY }}
         run: |
           source .github/jl.sh
+          read -r STEP ARG <<<"$STEP_IN"
           set +e
           t=$(date +%s)
-          cmd="cd $REPO_DIR && bash scripts/lab.sh $(printf '%q %q %q' "$LAB" "$STEP" "$ARG")"
-          vm_exec "$cmd" 2>&1 | grep -v '^Executing on' | sed -E 's/\b([0-9]{1,3}\.){3}[0-9]{1,3}\b/<ip>/g' | tee out.txt
+          cmd="cd $REPO_DIR && bash scripts/lab.sh $(printf '%q %q %q' "$LAB" "$STEP" "${ARG:-}")"
+          vm_exec "$cmd" 2>&1 | grep -v '^Executing on' | sed -uE 's/\b([0-9]{1,3}\.){3}[0-9]{1,3}\b/<ip>/g' | tee out.txt
           rc=${PIPESTATUS[0]}
           {
-            echo "### lab $LAB $STEP ${ARG} → exit $rc in $(( $(date +%s) - t ))s"
+            echo "### $LAB $STEP_IN → exit $rc in $(( $(date +%s) - t ))s"
             echo '```'; tail -n 60 out.txt; echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
           dir=$(sed -n 's/^ARTIFACT_DIR=//p' out.txt | tail -1)
@@ -111,11 +90,93 @@ jobs:
           exit "$rc"
       - name: Fetch artifact from VM
         if: always() && env.ARTIFACT_DIR != ''
+        env:
+          JL_API_KEY: ${{ secrets.JL_API_KEY }}
         run: |
           source .github/jl.sh
           jl download "$VM_ID" "$REPO_DIR/$ARTIFACT_DIR" lab-artifact -r > /dev/null
       - uses: actions/upload-artifact@v4
         if: always() && env.ARTIFACT_DIR != ''
         with:
-          name: mags-mlops-prod-demo-lab-${{ inputs.lab }}-${{ inputs.step }}-${{ github.run_id }}
+          name: mags-mlops-prod-demo-${{ inputs.lab }}-${{ github.run_id }}
           path: lab-artifact/
+
+  client:
+    # No concurrency group: lab5 lora-swap / lab6 drain must run WHILE client traffic flows. Own runner per click.
+    if: ${{ startsWith(inputs.step, 'client-') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check inputs
+        run: |
+          [[ $STEP_IN =~ ^client-[a-z0-9-]+$ ]] || { echo "::error::bad step"; exit 1; }
+          [[ $LABEL =~ ^[A-Za-z0-9._-]{1,40}$ ]] || { echo "::error::label: 1-40 of A-Z a-z 0-9 . _ -"; exit 1; }
+          [[ $DURATION =~ ^[0-9]{1,4}$ ]] && [ "$DURATION" -le 900 ] || { echo "::error::duration: 1-900 s"; exit 1; }
+      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e  # v6.8.0; secrets are step-scoped so this step never sees them
+      - name: Install jl + SSH key
+        env:
+          KEY: ${{ secrets.JL_SSH_PRIVATE_KEY }}
+        run: |
+          pipx install jarvislabs==0.2.17 > /dev/null
+          install -d -m 700 ~/.ssh && printf '%s\n' "$KEY" > ~/.ssh/id_ed25519 && chmod 600 ~/.ssh/id_ed25519
+      - name: Find the VM, open the metrics tunnel
+        env:
+          JL_API_KEY: ${{ secrets.JL_API_KEY }}
+          GATEWAY_KEY: ${{ secrets.GATEWAY_KEY }}
+        run: |
+          source .github/jl.sh
+          vm_find
+          [ "$VM_STATUS" = Running ] || { echo "::error::VM not running (${VM_STATUS:-missing}) — demo-gpu action=resume"; exit 1; }
+          [ -n "$VM_IP" ] || { echo "::error::VM has no public IP"; exit 1; }
+          umask 077 && echo "GATEWAY_KEY=$GATEWAY_KEY" > .env   # smoke_test.sh sources ./.env
+          ssh -f -N -o StrictHostKeyChecking=accept-new -o ExitOnForwardFailure=yes -o ServerAliveInterval=15 \
+            -L 9090:127.0.0.1:9090 "ubuntu@$VM_IP" > ssh.log 2>&1 \
+            || { sed -E 's/\b([0-9]{1,3}\.){3}[0-9]{1,3}\b/<ip>/g' ssh.log; echo "::error::ssh tunnel failed"; exit 1; }
+          curl -sf -o /dev/null http://127.0.0.1:9090/caddy-health || { echo "::error::metrics tunnel not up"; exit 1; }
+          code=$(curl -s -o /dev/null -w '%{http_code}' "http://$VM_IP/health")
+          echo "public endpoint /health: $code · GPU $VM_GPU · runner $(uname -m) $(. /etc/os-release && echo "$PRETTY_NAME")"
+          [ "$code" = 200 ] || { echo "::error::public /health is $code"; exit 1; }
+      - name: Run step
+        env:
+          GATEWAY_KEY: ${{ secrets.GATEWAY_KEY }}
+        run: |
+          export BASE_URL="http://$VM_IP"
+          # shellcheck disable=SC2329  # invoked via cmd=(stream)
+          stream() {
+            curl -sN "$BASE_URL/v1/chat/completions" -H "Authorization: Bearer $GATEWAY_KEY" -H 'Content-Type: application/json' \
+              -d '{"model":"qwen2.5-7b","stream":true,"max_tokens":900,"messages":[{"role":"user","content":"Explain, step by step and in detail, how a GPU serves many chat users at once."}]}' \
+              | tee raw.sse | sed -un 's/^data: //p' | grep --line-buffered -v '^\[DONE\]' | jq --unbuffered -rj '.choices[0].delta.content // empty'
+            echo
+            # a drained server must still finish the answer: [DONE] + finish_reason=stop, else red
+            reason=$(sed -n 's/^data: //p' raw.sse | grep -v '^\[DONE\]' | jq -r '.choices[0].finish_reason // empty' | tail -1)
+            grep -q '^data: \[DONE\]' raw.sse || { echo "STREAM CUT OFF (no [DONE])"; return 1; }
+            echo "stream complete: [DONE], finish_reason=$reason, $(grep -c '^data: {' raw.sse) chunks"
+          }
+          case ${STEP_IN#client-} in
+            smoke)             cmd=(bash scripts/smoke_test.sh) ;;
+            stream)            cmd=(stream) ;;
+            structured-output) cmd=(uv run -q scripts/demo_structured_output.py) ;;
+            prefix-cache)      cmd=(uv run -q scripts/demo_prefix_cache.py) ;;
+            prefix-cache-8k)   cmd=(uv run -q scripts/demo_prefix_cache.py --repeat 130) ;;
+            bench-sweep)       cmd=(uv run -q scripts/benchmark_concurrency.py --label "$LABEL") ;;
+            bench-pressure)    cmd=(uv run -q scripts/benchmark_concurrency.py --label "$LABEL-pressure" --preset pressure) ;;
+            lora-rollout)      cmd=(uv run -q scripts/demo_multilora_rollout.py rollout --swap-mode none --duration "$DURATION") ;;
+            lora-compare)      cmd=(uv run -q scripts/demo_multilora_rollout.py compare /adapters/sql-v1 /adapters/sql-v2) ;;
+            *) echo "::error::unknown client step $STEP_IN"; exit 1 ;;
+          esac
+          t=$(date +%s)
+          set +e
+          "${cmd[@]}" 2>&1 | sed -uE 's/\b([0-9]{1,3}\.){3}[0-9]{1,3}\b/<ip>/g' | tee out.txt
+          rc=${PIPESTATUS[0]}
+          {
+            echo "### $LAB $STEP_IN → exit $rc in $(( $(date +%s) - t ))s (GitHub-hosted runner → public endpoint, GPU $VM_GPU)"
+            echo '```'; tail -n 60 out.txt; echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit "$rc"
+      - uses: actions/upload-artifact@v4
+        if: always() && startsWith(inputs.step, 'client-bench-')
+        with:
+          name: mags-mlops-prod-demo-${{ inputs.lab }}-bench-${{ github.run_id }}
+          path: results/bench-${{ inputs.label }}*.csv
+          if-no-files-found: ignore

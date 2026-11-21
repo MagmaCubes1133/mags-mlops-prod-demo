@@ -1,0 +1,38 @@
+# Button for one lab: pick a step, click Run. Engine: lab.yml (VM steps via scripts/lab.sh; client-* on a GitHub runner).
+name: "Lab 5 · Multi-LoRA rollout"
+run-name: "lab5 ${{ inputs.step }}"
+
+on:
+  workflow_dispatch:
+    inputs:
+      step:
+        type: choice
+        options:
+          - "lora-up"
+          - "lora-status"
+          - "make-v2"
+          - "client-lora-rollout"
+          - "lora-swap v2"
+          - "lora-swap v1"
+          - "client-lora-compare"
+      sync:
+        description: VM steps - sync the VM checkout to this commit first (off = ~10 s faster)
+        type: boolean
+        default: true
+      duration:
+        description: client-lora-rollout - seconds of traffic
+        type: string
+        default: "180"
+
+permissions:
+  contents: read
+
+jobs:
+  run:
+    uses: ./.github/workflows/lab.yml
+    with:
+      lab: lab5
+      step: ${{ inputs.step }}
+      sync: ${{ inputs.sync }}
+      duration: ${{ inputs.duration }}
+    secrets: inherit

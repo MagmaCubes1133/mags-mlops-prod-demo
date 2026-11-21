@@ -1,4 +1,4 @@
-# Sourced by .github/workflows/demo-gpu.yml. Public repo: mask ids/IPs BEFORE anything can print them
+# Sourced by .github/workflows/demo-gpu.yml and lab.yml. Public repo: mask ids/IPs BEFORE anything can print them
 # (`jl exec` itself prints "Executing on <machine_id>").
 
 # vm_find: sets VM_ID, VM_GPU, VM_STATUS (empty when no VM). Prefers $MACHINE_ID if it still exists,
@@ -15,7 +15,7 @@ vm_find() {
     jq -r '[.public_ip, .private_ip, (.ssh_command // "" | split("@")[1] // empty)] | .[] | select(. != null and . != "")' <<<"$row" \
       | while read -r v; do echo "::add-mask::$v"; done
   fi
-  VM_IP=$(jq -r '.public_ip // empty' <<<"$row")   # masked above; client.yml uses it as the public endpoint
+  VM_IP=$(jq -r '.public_ip // empty' <<<"$row")   # masked above; lab.yml client-* steps use it as the public endpoint
   { echo "VM_ID=$VM_ID"; echo "VM_GPU=$VM_GPU"; echo "VM_STATUS=$VM_STATUS"; echo "VM_IP=$VM_IP"; } >>"${GITHUB_ENV:-/dev/null}"
   echo "VM: ${VM_ID:+found} ${VM_ID:-none} gpu=${VM_GPU:-?} status=${VM_STATUS:-?}"
 }

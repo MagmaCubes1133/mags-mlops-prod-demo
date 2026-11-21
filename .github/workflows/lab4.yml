@@ -1,0 +1,40 @@
+# Button for one lab: pick a step, click Run. Engine: lab.yml (VM steps via scripts/lab.sh; client-* on a GitHub runner).
+name: "Lab 4 · Quantization under load"
+run-name: "lab4 ${{ inputs.step }}"
+
+on:
+  workflow_dispatch:
+    inputs:
+      step:
+        type: choice
+        options:
+          - "client-bench-pressure"
+          - "switch baseline"
+          - "switch awq"
+          - "switch fp8"
+          - "switch fp8-kv"
+          - "vram-math"
+          - "metrics-watch start"
+          - "metrics-watch stop"
+          - "client-bench-sweep"
+      sync:
+        description: VM steps - sync the VM checkout to this commit first (off = ~10 s faster)
+        type: boolean
+        default: true
+      label:
+        description: client-bench-* - results label (awq, bf16, ...); CSV attached to the run
+        type: string
+        default: run
+
+permissions:
+  contents: read
+
+jobs:
+  run:
+    uses: ./.github/workflows/lab.yml
+    with:
+      lab: lab4
+      step: ${{ inputs.step }}
+      sync: ${{ inputs.sync }}
+      label: ${{ inputs.label }}
+    secrets: inherit

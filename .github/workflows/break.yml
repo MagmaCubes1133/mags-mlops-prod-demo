@@ -1,0 +1,27 @@
+# Button for one lab: pick a step, click Run. Engine: lab.yml (VM steps via scripts/lab.sh; client-* on a GitHub runner).
+name: "Lab 3→4 · Break (warm AWQ)"
+run-name: "break ${{ inputs.step }}"
+
+on:
+  workflow_dispatch:
+    inputs:
+      step:
+        type: choice
+        options:
+          - "awq-warm"
+      sync:
+        description: VM steps - sync the VM checkout to this commit first (off = ~10 s faster)
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+jobs:
+  run:
+    uses: ./.github/workflows/lab.yml
+    with:
+      lab: break
+      step: ${{ inputs.step }}
+      sync: ${{ inputs.sync }}
+    secrets: inherit
