@@ -306,6 +306,15 @@ Steps without a prefix run `scripts/lab.sh <lab> <step>` on the VM (35–130 s);
 | 400 on a long chat | prompt + `max_tokens` exceeds `MAX_MODEL_LEN` (8,192) |
 | Port 80 unreachable from outside | `ssh -L 8080:localhost:80 ubuntu@<vm>` and use `http://localhost:8080` |
 
+## Next steps after the workshop
+
+Clone it, fork it, break it, tinker with it.
+
+- **Benchmark your GPU.** Same script, your hardware, your numbers: `uv run scripts/benchmark_concurrency.py --label <gpu>` (start from [`profiles/`](profiles/)).
+- **Add tool calling.** Qwen2.5 is trained for it; vLLM needs `--enable-auto-tool-choice --tool-call-parser hermes`. Your app runs the tools (web search, MCP), so the model server stays on its private network. An optional Lab 7 with a worked agent loop follows after the dress rehearsal verifies it on this stack.
+- **Add Grafana.** Chart the four numbers from slide S3-22: `vllm:num_requests_waiting`, `vllm:kv_cache_usage_perc`, `vllm:time_to_first_token_seconds`, `vllm:inter_token_latency_seconds` (scrape `127.0.0.1:9090/metrics`).
+- **Gate an add-on.** Train a LoRA for a course task and release it only if it passes an eval: [Lab 5](docs/labs.md) shows the swap and the rollback.
+
 ## About the author
 
 <table>
@@ -321,6 +330,10 @@ Steps without a prefix run `scripts/lab.sh <lab> <step>` on the VM (35–130 s);
 - **Side projects:** AQI forecasting (ET Hackathon 2026); real-time game-playing models that react in under 30 ms from frame to action on a laptop.
 
 GitHub: [@MagmaCubes1133](https://github.com/MagmaCubes1133)
+
+LinkedIn: [saumya1saraswat](https://www.linkedin.com/in/saumya1saraswat/) · Email: on my [GitHub profile](https://github.com/MagmaCubes1133)
+
+**Open to working together:** research collaborations (e.g. scaling the AQI forecasting work), building projects, and judging or mentoring hackathons that want an industry view.
 
 </td>
 </tr>
